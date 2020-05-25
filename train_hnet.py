@@ -33,13 +33,46 @@ class AttentionLayer(nn.Module):
             )
 
 
+class HNet2D(nn.Module):
+    def __init__(self, use_pos_enc=True):
+        super().__init__()
+        self.in_conv = nn.ReLU(nn.BatchNorm2d(nn.Conv2d(6 if use_pos_enc else 1, 32, kernel_size=(3, 3), padding=1)))
+        self.attn = AttentionLayer(32, 32, 32)
+        self.out_conv1 = nn.ReLU(nn.Conv1d(32, 32, kernel_size=5, padding=2))
+        self.out_conv2 = nn.Conv1d(32, 1, kernel_size=5, padding=2)
+
+    def forward(self, query):
+        out = self.in_conv(query)
+        out = out.view(query.shape[0], query.shape[1], -1)
+        out = self.attn.forward(out)
+        out = self.out_conv1(out)
+        out = self.out_conv2(out)
+        return out.squeeze(1)
+
+
 class HNet(nn.Module):
     def __init__(self, use_pos_enc=True):
         super().__init__()
-        self.attn = AttentionLayer(6 if use_pos_enc else 1, 1, 64)
+        hid_ch = 16
+        self.out_conv1 = nn.Conv1d(6 if use_pos_enc else 1, hid_ch, kernel_size=5, padding=2)
+        self.out_conv2 = nn.Conv1d(hid_ch, hid_ch, kernel_size=5, padding=2)
+        self.out_conv3 = nn.Conv1d(hid_ch, hid_ch, kernel_size=5, padding=2)
+        self.attn = AttentionLayer(hid_ch, hid_ch, hid_ch)
+        self.out_conv4 = nn.Conv1d(hid_ch, hid_ch, kernel_size=5, padding=2)
+        self.out_conv5 = nn.Conv1d(hid_ch, 1, kernel_size=5, padding=2)
 
     def forward(self, query):
-        return self.attn.forward(query).squeeze(1)
+        out = self.out_conv1(query)
+        out = F.relu(out)
+        out = self.out_conv2(out)
+        out = F.relu(out)
+        out = self.out_conv3(out)
+        out = F.relu(out)
+        out = self.out_conv4(out)
+        out = F.relu(out)
+        out = self.attn.forward(out)
+        out = self.out_conv5(out)
+        return out.squeeze(1)
 
 
 class HungarianDataset(Dataset):
@@ -74,7 +107,7 @@ class HungarianDataset(Dataset):
 
 
 def main():
-    batch_size = 16
+    batch_size = 256
     nb_epochs = 100
     use_pos_enc = True
 

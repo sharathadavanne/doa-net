@@ -80,12 +80,12 @@ def load_obj(name):
 
 def main():
     #### MAIN ALGO starts here
-    nb_train_samples = 1000
+    nb_train_samples = 10000
     nb_test_samples = int(0.1*1000)
     pickle_filename = 'hung_data'
 
     max_doas = 5
-    doas_range = range(1,max_doas)
+    doas_range = range(0, max_doas)
     azi_range = range(-180, 180, 1)
     ele_range = range(-60, 61, 1)
     for set_cnt, nb_samples in enumerate([nb_train_samples, nb_test_samples]):
