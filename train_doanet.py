@@ -19,6 +19,7 @@ plot.switch_backend('agg')
 from IPython import embed
 sys.path.insert(0,'/home/sharath/PycharmProjects/hungarian-net')
 from train_hnet import HNetGRU
+from scipy.optimize import linear_sum_assignment
 
 
 def collect_test_labels(_data_gen_test, _data_out, _nb_classes, quick_test):
@@ -42,24 +43,18 @@ def collect_test_labels(_data_gen_test, _data_out, _nb_classes, quick_test):
     return gt_doa
 
 
-def plot_functions(fig_name, _tr_loss, _val_loss, _doa_loss):
+def plot_functions(fig_name, _tr_loss, _val_loss, _tr_hung_loss, _val_hung_loss):
     plot.figure()
     nb_epoch = len(_tr_loss)
-    plot.subplot(311)
+    plot.subplot(211)
     plot.plot(range(nb_epoch), _tr_loss, label='train loss')
-    plot.plot(range(nb_epoch), _val_loss, label='train loss')
+    plot.plot(range(nb_epoch), _val_loss, label='test loss')
     plot.legend()
     plot.grid(True)
 
-    plot.subplot(312)
-    plot.plot(range(nb_epoch), _doa_loss[:, 0]/180., label='doa er / 180')
-    plot.plot(range(nb_epoch), _doa_loss[:, 1], label='doa fr')
-    plot.legend()
-    plot.grid(True)
-
-    plot.subplot(313)
-    plot.plot(range(nb_epoch), _doa_loss[:, 2], label='pred_pks')
-    plot.plot(range(nb_epoch), _doa_loss[:, 3], label='good_pks')
+    plot.subplot(212)
+    plot.plot(range(nb_epoch), _tr_hung_loss, label='train hung loss')
+    plot.plot(range(nb_epoch), _val_hung_loss, label='test hung loss')
     plot.legend()
     plot.grid(True)
 
@@ -104,7 +99,8 @@ def main(argv):
     hnet_model = HNetGRU(max_len=2).to(device)
     hnet_model.eval()
     hnet_model.load_state_dict(torch.load("models/hnet_model.pt" ))
-
+    print('---------------- Hungarian-net -------------------')
+    print(hnet_model)
     feat_cls = cls_feature_class.FeatureClass(params)
     train_splits, val_splits, test_splits = None, None, None
 
@@ -151,17 +147,21 @@ def main(argv):
             params['fnn_size']))
 
         model = doanet_model.CRNN(data_in, data_out, params)
-
-        best_doa_metric = 99999
-        best_epoch = -1
+        print('---------------- DOA-net -------------------')
+        print(model)
+        best_val_loss = 99999
+        best_val_epoch = -1
+        best_hung_loss = 99999
+        best_hung_epoch = -1
         patience_cnt = 0
         nb_epoch = 2 if params['quick_test'] else params['nb_epochs']
-        tr_loss = np.zeros(nb_epoch)
-        val_loss = np.zeros(nb_epoch)
-        doa_metric = np.zeros((nb_epoch, 6))
+        tr_loss_list = np.zeros(nb_epoch)
+        val_loss_list = np.zeros(nb_epoch)
+        hung_tr_loss_list = np.zeros(nb_epoch)
+        hung_val_loss_list = np.zeros(nb_epoch)
 
         optimizer = optim.Adam(model.parameters())
-        criterion = torch.nn.MSELoss(reduction='sum')
+        criterion = torch.nn.MSELoss()
 
         # start training
         for epoch_cnt in range(nb_epoch):
@@ -169,108 +169,122 @@ def main(argv):
 
             # TRAINING
             model.train()
-            train_loss, nb_train_batches = 0., 0.
+            train_loss, train_hung_loss, nb_train_batches = 0., 0., 0.
             for data, target in data_gen_train.generate():
                 data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
+                output = model(data)
                 optimizer.zero_grad()
 
-                output = model(data)
-
-                # (batch, sequence, nb_doas*3) to (batch, sequence, nb_doas, 3)
-                output = output.view(output.shape[0], output.shape[1], output.shape[2]//3, 3)
-                target = target.view(target.shape[0], target.shape[1], target.shape[2]//3, 3)
+                # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)
+                max_nb_doas = output.shape[2]//3
+                output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas)
+                target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas)
 
                 # get pair-wise distance matrix between predicted and reference.
-                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + 1e-10), torch.sqrt(torch.sum(output**2, -1) + 1e-10)
-                target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
-                dist_mat = torch.matmul(output, torch.transpose(target, -1, -2)).view(-1, 2, 2)
+                # target_norm, output_norm = torch.sqrt(torch.sum(target**2, -2) + 1e-10), torch.sqrt(torch.sum(output**2, -2) + 1e-10)
+                # target, output = target/target_norm.unsqueeze(-2), output/output_norm.unsqueeze(-2)
+                dist_mat = torch.matmul(torch.transpose(output, -1, -2), target)
+                dist_mat[dist_mat == 0.0] = -1 # [TODO] fix this to set the distance value to -1 for default target DOA (0, 0, 0)
                 dist_mat = torch.clamp(dist_mat, -1, 1)
-                dist_mat = torch.acos(dist_mat)
+                dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
+                dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
 
-                # get data association between predicted and reference using hungarian-net
-                hidden = torch.zeros(1, dist_mat.shape[0], 128)
-                da_mat, _, _ = hnet_model(dist_mat, hidden)
-                da_mat = da_mat.sigmoid()
+                if params['use_hnet']:
+                    # get data association between predicted and reference using hungarian-net
+                    hidden = torch.zeros(1, dist_mat.shape[0], 128)
+                    da_mat, _, _ = hnet_model(dist_mat, hidden)
+                    da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
 
-                loss = torch.mean(dist_mat*da_mat.view(dist_mat.shape))
+                    loss = torch.mean(dist_mat * da_mat.view(dist_mat.shape))
+                else:
+                    loss = criterion(output, target)
+
+                    loc_hung_loss = 0.0
+                    dist_mat = dist_mat.detach().numpy()
+                    for loc_dist_mat in dist_mat:
+                        row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
+                        loc_hung_loss += loc_dist_mat[row_ind, col_ind].sum()
+                    loc_hung_loss /= dist_mat.shape[0]
 
                 loss.backward()
                 optimizer.step()
-
+                train_hung_loss += loc_hung_loss
                 train_loss += loss.item()
                 nb_train_batches += 1
                 if params['quick_test'] and nb_train_batches ==4:
                     break
+            train_hung_loss /= nb_train_batches
             train_loss /= nb_train_batches
 
-            # #TESTING
+            ## TESTING
             model.eval()
-            test_loss, nb_test_batches = 0., 0.
+            test_loss, test_hung_loss, nb_test_batches = 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
                     data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
-
                     output = model(data)
 
-                    # (batch, sequence, nb_doas*3) to (batch, sequence, nb_doas, 3)
-                    output = output.view(output.shape[0], output.shape[1], output.shape[2]//3, 3)
-                    target = target.view(target.shape[0], target.shape[1], target.shape[2]//3, 3)
+                    # (batch, sequence, max_nb_doas*3) to (batch, sequence, max_nb_doas, 3)
+                    max_nb_doas = output.shape[2]//3
+                    output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas)
+                    target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas)
+
 
                     # get pair-wise distance matrix between predicted and reference.
-                    target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + 1e-10), torch.sqrt(torch.sum(output**2, -1) + 1e-10)
-                    target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
-                    dist_mat = torch.matmul(output, torch.transpose(target, -1, -2)).view(-1, 2, 2)
+                    # target_norm, output_norm = torch.sqrt(torch.sum(target**2, -2) + 1e-10), torch.sqrt(torch.sum(output**2, -2) + 1e-10)
+                    # target, output = target/target_norm.unsqueeze(-2), output/output_norm.unsqueeze(-2)
+                    dist_mat = torch.matmul(torch.transpose(output, -1, -2), target)
+                    dist_mat[dist_mat == 0.0] = -1
                     dist_mat = torch.clamp(dist_mat, -1, 1)
-                    dist_mat = torch.acos(dist_mat)
+                    dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
+                    dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
 
-                    # get data association between predicted and reference using hungarian-net
-                    hidden = torch.zeros(1, dist_mat.shape[0], 128)
-                    da_mat, _, _ = hnet_model(dist_mat, hidden)
-                    da_mat = da_mat.sigmoid()
+                    if params['use_hnet']:
+                        # get data association between predicted and reference using hungarian-net
+                        hidden = torch.zeros(1, dist_mat.shape[0], 128)
+                        da_mat, _, _ = hnet_model(dist_mat, hidden)
+                        da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
 
-                    loss = torch.mean(dist_mat*da_mat.view(dist_mat.shape))
+                        loss = torch.mean(dist_mat * da_mat.view(dist_mat.shape))
+                    else:
+                        loss = criterion(output, target)
 
+                        loc_hung_loss = 0.0
+                        dist_mat = dist_mat.detach().numpy()
+                        for loc_dist_mat in dist_mat:
+                            row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
+                            loc_hung_loss += loc_dist_mat[row_ind, col_ind].sum()
+                        loc_hung_loss /= dist_mat.shape[0]
+
+                    test_hung_loss += loc_hung_loss
                     test_loss += loss.item()  # sum up batch loss
                     nb_test_batches += 1
-                    if params['quick_test'] and nb_test_batches==2:
+                    if params['quick_test'] and nb_test_batches == 2:
                         break
 
+            test_hung_loss /= nb_test_batches
             test_loss /= nb_test_batches
 
-            print('epoch: {}, train_loss: {}, val_loss: {}'.format(epoch_cnt, train_loss, test_loss))
-        #     doa_pred = evaluation_metrics.reshape_3Dto2D(pred)
-        #
-        # #     # Calculate the DOA score
-        #     doa_metric[epoch_cnt, :] = evaluation_metrics.compute_doa_scores_regr_xyz(doa_pred, doa_gt)
-        #
-        #     # Visualize the metrics with respect to epochs
-        #     plot_functions(unique_name, tr_loss, val_loss, doa_metric)
-        #
-        #     patience_cnt += 1
-        #     if doa_metric[epoch_cnt] < best_doa_metric:
-        #         best_doa_metric = doa_metric[epoch_cnt]
-        #         best_epoch = epoch_cnt
-        #         model.save(model_name)
-        #         patience_cnt = 0
-        #
-        #     print(
-        #         'epoch_cnt: {}, time: {:0.2f}s, tr_loss: {:0.2f}, val_loss: {:0.2f}, '
-        #         'DE: {:0.1f}, FR:{:0.1f}, '
-        #         'best_doa_score: {:0.2f}, best_epoch : {}\n'.format(
-        #             epoch_cnt, time.time() - start, tr_loss[epoch_cnt],  val_loss[epoch_cnt],
-        #             doa_metric[epoch_cnt, 0], doa_metric[epoch_cnt, 1]*100,
-        #             best_doa_metric, best_epoch
-        #         )
-        #     )
-        #     if patience_cnt > params['patience']:
-        #         break
-        #
-        # print('\nResults on validation split:')
-        # print('\tUnique_name: {} '.format(unique_name))
-        # print('\tSaved model for the best_epoch: {}'.format(best_epoch))
-        # print('\tDOA_score (early stopping score) : {}'.format(best_doa_metric))
-        # print('\tDOA_error: {:0.1f}, Frame recall: {:0.1f}'.format(doa_metric[best_epoch, 0], doa_metric[best_epoch, 1]*100))
-        #
+            if test_loss < best_val_loss:
+                best_val_loss = test_loss
+                best_val_epoch = epoch_cnt
+                torch.save(model.state_dict(), "models/best_val_model.pt")
+            if test_hung_loss < best_hung_loss:
+                best_hung_loss = test_hung_loss
+                best_hung_epoch = epoch_cnt
+                torch.save(model.state_dict(), "models/best_hung_model.pt")
+
+            print('epoch: {}, train_loss: {:0.2f}, val_loss: {:0.2f}, train_hung_loss: {:0.2f}, test_hung_loss: {:0.2f}, '
+                  'best_val_epoch: {}, best_hung_epoch: {}'.format(
+                epoch_cnt, train_loss, test_loss, train_hung_loss, test_hung_loss, best_val_epoch, best_hung_epoch))
+
+            tr_loss_list[epoch_cnt], val_loss_list[epoch_cnt], hung_tr_loss_list[epoch_cnt], hung_val_loss_list[epoch_cnt] = train_loss, test_loss, train_hung_loss, test_hung_loss
+            plot_functions(unique_name, tr_loss_list, val_loss_list, hung_tr_loss_list, hung_val_loss_list)
+
+            patience_cnt += 1
+            if patience_cnt > params['patience']:
+                break
+
         # # ------------------  Calculate metric scores for unseen test split ---------------------------------
         # print('\nLoading the best model and predicting results on the testing split')
         # print('\tLoading testing dataset:')

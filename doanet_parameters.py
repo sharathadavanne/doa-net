@@ -32,8 +32,9 @@ def get_params(argv='1'):
         nb_mel_bins=64,
 
         # DNN MODEL PARAMETERS
-        label_sequence_length=16,        # Feature sequence length
-        batch_size=256,              # Batch size
+        use_hnet=False,
+        label_sequence_length=60,    # Feature sequence length
+        batch_size=64,              # Batch size
         dropout_rate=0,             # Dropout rate, constant for all layers
         nb_cnn2d_filt=16,           # Number of CNN nodes, constant for each layer
         f_pool_size=[4, 4, 2],      # CNN frequency pooling, length of list = number of CNN layers, list value = pooling per layer
@@ -43,8 +44,7 @@ def get_params(argv='1'):
 
         nb_fnn_layers=1,
         fnn_size=32,             # FNN contents, length of list = number of layers, list value = number of nodes
-        nb_epochs=50,               # Train for maximum epochs
-        epochs_per_fit=5,           # Number of epochs per fit
+        nb_epochs=500,               # Train for maximum epochs
     )
     feature_label_resolution = int(params['label_hop_len_s'] // params['hop_len_s'])
     params['feature_sequence_length'] = params['label_sequence_length'] * feature_label_resolution
