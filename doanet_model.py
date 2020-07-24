@@ -22,7 +22,7 @@ class ConvBlock(torch.nn.Module):
         self.bn = torch.nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        x = F.relu_(self.bn(self.conv(x)))
+        x = torch.relu_(self.bn(self.conv(x)))
         return x
 
 
@@ -73,10 +73,11 @@ class CRNN(torch.nn.Module):
         ''' (batch_size, time_steps, feature_maps):'''
 
         (x, _) = self.gru(x)
+        x = torch.tanh(x)
         x = x[:, :, x.shape[-1]//2:] * x[:, :, :x.shape[-1]//2]
         '''(batch_size, time_steps, feature_maps)'''
 
         for fnn_cnt in range(len(self.fnn_list)):
-            x = F.tanh(self.fnn_list[fnn_cnt](x))
+            x = torch.tanh(self.fnn_list[fnn_cnt](x))
         '''(batch_size, time_steps, label_dim)'''
         return x

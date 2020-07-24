@@ -12,9 +12,12 @@ def get_params(argv='1'):
 
         # INPUT PATH
         dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
+        # dataset_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/',
 
         # OUTPUT PATH
         feat_label_dir='DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
+        # feat_label_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
+
         model_dir='models/',   # Dumps the trained models and training curves in this folder
         dcase_output=True,     # If true, dumps the results recording-wise in 'dcase_dir' path.
                                # Set this true after you have finalized your model, save the output, and submit
@@ -32,18 +35,18 @@ def get_params(argv='1'):
         nb_mel_bins=64,
 
         # DNN MODEL PARAMETERS
-        use_hnet=False,
+        use_hnet=True,
         label_sequence_length=60,    # Feature sequence length
         batch_size=64,              # Batch size
         dropout_rate=0,             # Dropout rate, constant for all layers
-        nb_cnn2d_filt=16,           # Number of CNN nodes, constant for each layer
+        nb_cnn2d_filt=64,           # Number of CNN nodes, constant for each layer
         f_pool_size=[4, 4, 2],      # CNN frequency pooling, length of list = number of CNN layers, list value = pooling per layer
 
         nb_rnn_layers=2,
-        rnn_size=32,        # RNN contents, length of list = number of layers, list value = number of nodes
+        rnn_size=128,        # RNN contents, length of list = number of layers, list value = number of nodes
 
         nb_fnn_layers=1,
-        fnn_size=32,             # FNN contents, length of list = number of layers, list value = number of nodes
+        fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
         nb_epochs=500,               # Train for maximum epochs
     )
     feature_label_resolution = int(params['label_hop_len_s'] // params['hop_len_s'])

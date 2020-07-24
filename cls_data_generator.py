@@ -136,11 +136,11 @@ class DataGenerator(object):
                 feat = np.zeros((self._feature_batch_seq_len, self._nb_mel_bins * self._nb_ch))
                 for j in range(self._feature_batch_seq_len):
                     feat[j, :] = self._circ_buf_feat.popleft()
-                feat = np.reshape(feat, (self._feature_batch_seq_len, self._nb_mel_bins, self._nb_ch))
+                feat = np.reshape(feat, (self._feature_batch_seq_len, self._nb_ch, self._nb_mel_bins))
 
                 # Split to sequences
                 feat = self._split_in_seqs(feat, self._feature_seq_len)
-                feat = np.transpose(feat, (0, 3, 1, 2))
+                feat = np.transpose(feat, (0, 2, 1, 3))
 
                 yield feat
 
@@ -180,11 +180,12 @@ class DataGenerator(object):
                     feat[j, :] = self._circ_buf_feat.popleft()
                 for j in range(self._label_batch_seq_len):
                     label[j, :] = self._circ_buf_label.popleft()
-                feat = np.reshape(feat, (self._feature_batch_seq_len, self._nb_mel_bins, self._nb_ch))
+
+                feat = np.reshape(feat, (self._feature_batch_seq_len, self._nb_ch, self._nb_mel_bins))
 
                 # Split to sequences
                 feat = self._split_in_seqs(feat, self._feature_seq_len)
-                feat = np.transpose(feat, (0, 3, 1, 2))
+                feat = np.transpose(feat, (0, 2, 1, 3))
                 label = self._split_in_seqs(label, self._label_seq_len)
                 yield feat, label
 
