@@ -187,6 +187,13 @@ class DataGenerator(object):
                 feat = self._split_in_seqs(feat, self._feature_seq_len)
                 feat = np.transpose(feat, (0, 2, 1, 3))
                 label = self._split_in_seqs(label, self._label_seq_len)
+                label = label[:, :, :-1]
+
+                if np.random.choice([0, 1]):
+                    new_label = np.zeros(label.shape)
+                    new_label[:, :, [0, 2, 4]] = label[:, :, [1, 3, 5]]
+                    new_label[:, :, [1, 3, 5]] = label[:, :, [0, 2, 4]]
+                    label = new_label
                 yield feat, label
 
     def _split_in_seqs(self, data, _seq_len):

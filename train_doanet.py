@@ -150,7 +150,7 @@ def main(argv):
             train_loss, train_hung_loss, nb_train_batches = 0., 0., 0.
             for data, target in data_gen_train.generate():
                 optimizer.zero_grad()
-                data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
+                data, target = torch.tensor(data).to(device).float(), torch.tensor(target).to(device).float()
                 output = model(data)
 
                 # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)
@@ -159,12 +159,9 @@ def main(argv):
                 target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
                 target_unit_vec = (target**2).sum(-1) # get unit vector length, to identify zero vectors
-                # target_unit_vec_length = target_unit_vec.repeat(1, 1, max_nb_doas).view(-1, max_nb_doas, max_nb_doas) # repeat the vector length to get mask for the D matrix
-                # negative_mat = torch.zeros(target_unit_vec_length.shape)
-                # negative_mat[target_unit_vec_length == 0] = -1
 
-                target[target_unit_vec==0] = torch.tensor([0., 0., 1.]).to(device)
-                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + 1e-10), torch.sqrt(torch.sum(output**2, -1) + 1e-10)
+                target[target_unit_vec==0] = torch.tensor([eps, eps, 1.]).to(device)
+                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
                 target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                 # get pair-wise distance matrix between predicted and reference.
@@ -175,17 +172,14 @@ def main(argv):
 
                 dist_mat_numpy = dist_mat.cpu().detach().numpy()
                 if params['use_hnet']:
-                    # get data association between predicted and reference using hungarian-net
-                    # hnet_dist_mat = (dist_mat * target_unit_vec_length.to(device)) + negative_mat.to(device)
-
                     with torch.no_grad():
                         hidden = torch.zeros(1, dist_mat.shape[0], 128).to(device)
                         da_mat, _, _ = hnet_model(dist_mat, hidden)
                         da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
-
+                        da_mat = da_mat.view(dist_mat.shape)
                     # Compute dMOTP loss for true positives
-                    dist_mat = dist_mat.view(da_mat.shape) * da_mat
-                    loss = torch.mean(dist_mat.sum(-1) / (da_mat.sum(-1) + eps))
+                    dist_mat = dist_mat * da_mat
+                    loss = torch.mean(dist_mat)
                 else:
                     loss = criterion(output, target)
 
@@ -211,7 +205,7 @@ def main(argv):
             test_loss, test_hung_loss, nb_test_batches = 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
-                    data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
+                    data, target = torch.tensor(data).to(device).float(), torch.tensor(target).to(device).float()
                     output = model(data)
 
                     # (batch, sequence, max_nb_doas*3) to (batch, sequence, max_nb_doas, 3)
@@ -220,12 +214,8 @@ def main(argv):
                     target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
                     target_unit_vec = (target**2).sum(-1) # get unit vector length, to identify zero vectors
-                    # target_unit_vec_length = target_unit_vec.repeat(1, 1, max_nb_doas).view(-1, max_nb_doas, max_nb_doas) # repeat the vector length to get mask for the D matrix
-                    # negative_mat = torch.zeros(target_unit_vec_length.shape)
-                    # negative_mat[target_unit_vec_length == 0] = -1
-
-                    target[target_unit_vec==0] = torch.tensor([0., 0., 1.]).to(device)
-                    target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + 1e-10), torch.sqrt(torch.sum(output**2, -1) + 1e-10)
+                    target[target_unit_vec==0] = torch.tensor([eps, eps, 1.]).to(device)
+                    target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
                     target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                     # get pair-wise distance matrix between predicted and reference.
@@ -236,16 +226,14 @@ def main(argv):
 
                     dist_mat_numpy = dist_mat.cpu().detach().numpy()
                     if params['use_hnet']:
-                        # get data association between predicted and reference using hungarian-net
-                        # hnet_dist_mat = (dist_mat * target_unit_vec_length.to(device)) + negative_mat.to(device)
                         with torch.no_grad():
                             hidden = torch.zeros(1, dist_mat.shape[0], 128).to(device)
                             da_mat, _, _ = hnet_model(dist_mat, hidden)
                             da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
-
+                            da_mat = da_mat.view(dist_mat.shape)
                         # Compute dMOTP loss for true positives
-                        dist_mat = dist_mat.view(da_mat.shape) * da_mat
-                        loss = torch.mean(dist_mat.sum(-1) / (da_mat.sum(-1) + eps))
+                        dist_mat = dist_mat * da_mat
+                        loss = torch.mean(dist_mat)
                     else:
                         loss = criterion(output, target)
 
