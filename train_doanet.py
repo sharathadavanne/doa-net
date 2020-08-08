@@ -85,7 +85,7 @@ def main(argv):
     train_splits, val_splits, test_splits = None, None, None
     if params['mode'] == 'dev':
         test_splits = [1]
-        val_splits = [2]
+        val_splits = [1]
         train_splits = [[3, 4, 5, 6]]
 
     for split_cnt, split in enumerate(test_splits):
@@ -137,7 +137,8 @@ def main(argv):
         hung_val_loss_list = np.zeros(nb_epoch)
 
         optimizer = optim.Adam(model.parameters())
-        criterion = torch.nn.MSELoss()
+        criterion1 = torch.nn.MSELoss()
+        criterion2 = torch.nn.MSELoss()
 
         # start training
         for epoch_cnt in range(nb_epoch):
@@ -160,7 +161,7 @@ def main(argv):
 
                 target_unit_vec = (target**2).sum(-1) # get unit vector length, to identify zero vectors
 
-                target[target_unit_vec==0] = torch.tensor([eps, eps, 1.]).to(device)
+                target[target_unit_vec==0] = torch.tensor([eps, eps, 1.]).to(device) #[TODO] have separate default DoAs for each regressor?
                 target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
                 target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
@@ -177,11 +178,23 @@ def main(argv):
                         da_mat, _, _ = hnet_model(dist_mat, hidden)
                         da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                         da_mat = da_mat.view(dist_mat.shape)
+                        max_val, max_inds = da_mat.max(-1)
+
                     # Compute dMOTP loss for true positives
                     dist_mat = dist_mat * da_mat
-                    loss = torch.mean(dist_mat)
+                    dist_loss = torch.mean(dist_mat)
+
+                    target = target.view(-1, target.shape[-2], target.shape[-1])
+                    output = output.view(-1, output.shape[-2], output.shape[-1])
+
+                    target1 = target[np.arange(max_inds.shape[0]), max_inds[:, 0]]
+                    target2 = target[np.arange(max_inds.shape[0]), max_inds[:, 1]]
+                    
+                    mse1 = criterion1(output[:, 0, :], target1)
+                    mse2 = criterion2(output[:, 1, :], target2)
+                    loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
                 else:
-                    loss = criterion(output, target)
+                    loss = criterion1(output, target)
 
                 loc_hung_loss = 0.0
                 for loc_dist_mat in dist_mat_numpy:
@@ -203,6 +216,7 @@ def main(argv):
             ## TESTING
             model.eval()
             test_loss, test_hung_loss, nb_test_batches = 0., 0., 0.
+            dMOTP, mse_b1, mse_b2 = 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
                     data, target = torch.tensor(data).to(device).float(), torch.tensor(target).to(device).float()
@@ -231,11 +245,26 @@ def main(argv):
                             da_mat, _, _ = hnet_model(dist_mat, hidden)
                             da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                             da_mat = da_mat.view(dist_mat.shape)
+                            max_val, max_inds = da_mat.max(-1)
                         # Compute dMOTP loss for true positives
                         dist_mat = dist_mat * da_mat
-                        loss = torch.mean(dist_mat)
+                        dist_loss = torch.mean(dist_mat)
+
+                        target = target.view(-1, target.shape[-2], target.shape[-1])
+                        output = output.view(-1, output.shape[-2], output.shape[-1])
+
+                        target1 = target[np.arange(max_inds.shape[0]), max_inds[:, 0]]
+                        target2 = target[np.arange(max_inds.shape[0]), max_inds[:, 1]]
+
+                        mse1 = criterion1(output[:, 0, :], target1)
+                        mse2 = criterion2(output[:, 1, :], target2)
+                        loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
+                        
+                        dMOTP += dist_loss
+                        mse_b1 += mse1
+                        mse_b2 += mse2
                     else:
-                        loss = criterion(output, target)
+                        loss = criterion1(output, target)
 
                     loc_hung_loss = 0.0
                     for loc_dist_mat in dist_mat_numpy:
@@ -249,26 +278,26 @@ def main(argv):
                     if params['quick_test'] and nb_test_batches == 2:
                         break
 
+
             test_hung_loss /= nb_test_batches
             test_loss /= nb_test_batches
+            dMOTP /= nb_test_batches
+            mse_b1 /= nb_test_batches
+            mse_b2 /= nb_test_batches
 
             if test_loss < best_val_loss:
                 best_val_loss = test_loss
                 best_val_epoch = epoch_cnt
-                torch.save(model.state_dict(), "models/best_val_model.pt")
-            if test_hung_loss < best_hung_loss:
-                best_hung_loss = test_hung_loss
-                best_hung_epoch = epoch_cnt
-                torch.save(model.state_dict(), "models/best_hung_model.pt")
+                torch.save(model.state_dict(), model_name)
 
             print(
                 'epoch: {}, time: {:0.2f}, '
-                'train_loss: {:0.2f}, val_loss: {:0.2f}, '
+                'train_loss: {:0.2f}, val_loss: {:0.2f} ({:0.2f},{:0.2f},{:0.2f}), '
                 'train_hung_loss: {:0.2f}, test_hung_loss: {:0.2f}, '
-                'best_val_epoch: {}, best_hung_epoch: {}'.format(
+                'best_val_epoch: {}'.format(
                     epoch_cnt, time.time()-start,
-                    train_loss, test_loss, train_hung_loss, test_hung_loss,
-                    best_val_epoch, best_hung_epoch)
+                    train_loss, test_loss, dMOTP, mse_b1, mse_b2, train_hung_loss, test_hung_loss,
+                    best_val_epoch)
             )
 
             tr_loss_list[epoch_cnt], val_loss_list[epoch_cnt], hung_tr_loss_list[epoch_cnt], hung_val_loss_list[epoch_cnt] = train_loss, test_loss, train_hung_loss, test_hung_loss

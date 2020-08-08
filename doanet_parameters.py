@@ -47,6 +47,7 @@ def get_params(argv='1'):
 
         nb_fnn_layers=1,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
+        branch_weights = [1, 1],
         nb_epochs=500,               # Train for maximum epochs
     )
     feature_label_resolution = int(params['label_hop_len_s'] // params['hop_len_s'])
@@ -58,6 +59,28 @@ def get_params(argv='1'):
     # ########### User defined parameters ##############
     if argv == '1':
         print("USING DEFAULT PARAMETERS\n")
+
+    elif argv == '12':
+        params['nb_cnn2d_filt'] = 32
+        params['rnn_size'] = 32
+
+    elif argv == '13':
+        params['nb_cnn2d_filt'] = 64
+        params['rnn_size'] = 64
+
+    elif argv == '14':
+        params['nb_cnn2d_filt'] = 128
+        params['rnn_size'] = 128
+
+    elif argv == '15':
+        params['nb_cnn2d_filt'] = 256
+        params['rnn_size'] = 256
+        params['batch_size'] = 96
+
+    elif argv == '16':
+        params['nb_cnn2d_filt'] = 512
+        params['rnn_size'] = 512
+        params['batch_size'] = 64
 
     elif argv == '2':
         params['mode'] = 'dev'
@@ -74,6 +97,27 @@ def get_params(argv='1'):
     elif argv == '5':
         params['mode'] = 'eval'
         params['dataset'] = 'foa'
+
+    elif argv == '6':
+        params['dropout_rate'] = 0.15
+
+    elif argv == '7':
+        params['dropout_rate'] = 0.3
+
+    elif argv == '8':
+        params['dropout_rate'] = 0.5
+
+    elif argv == '9':
+        params['dropout_rate'] = 0.15
+        params['branch_weights'] = [1, 10]
+
+    elif argv == '10':
+        params['dropout_rate'] = 0.15
+        params['branch_weights'] = [1, 100]
+
+    elif argv == '11':
+        params['dropout_rate'] = 0.15
+        params['branch_weights'] = [1, 1000]
 
     elif argv == '999':
         print("QUICK TEST MODE\n")
