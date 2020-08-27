@@ -29,10 +29,10 @@ def main(argv):
 
     model = doanet_model.CRNN(data_in, data_out, params)
     model.eval()
-    model.load_state_dict(torch.load("models/best_hung_model.pt", map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load("models/6_3030307_foa_dev_split1_model.h5", map_location=torch.device('cpu')))
     with torch.no_grad():
         for data, target in data_gen_test.generate():
-            data, target = torch.tensor(data).to(device).float(), target[:, :, :-1]
+            data, target = torch.tensor(data).to(device).float(), target
             output = model(data)
             output = output.detach().numpy()
             mel_spec = data[0][0]

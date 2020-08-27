@@ -151,17 +151,15 @@ class FeatureClass:
         """
         x_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
         y_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
-        z_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
-        gt_nb_doa = np.zeros(self._max_label_frames, dtype=int)
+        z_label = np.ones((self._max_label_frames, self._nb_unique_classes)) # default direction is along z-axis hence intialized to one
 
         for frame_ind, active_event_list in _desc_file.items():
             if frame_ind < self._max_label_frames:
-                gt_nb_doa[frame_ind] = len(active_event_list)
-                for active_event in range(gt_nb_doa[frame_ind]):
+                for active_event in range(len(active_event_list)):
                     x_label[frame_ind, active_event] = active_event_list[active_event][1]
                     y_label[frame_ind, active_event] = active_event_list[active_event][2]
                     z_label[frame_ind, active_event] = active_event_list[active_event][3]
-        label_mat = np.concatenate((x_label, y_label, z_label, gt_nb_doa[:, np.newaxis]), axis=1)
+        label_mat = np.concatenate((x_label, y_label, z_label), axis=1)
         return label_mat
 
     # ------------------------------- EXTRACT FEATURE AND PREPROCESS IT -------------------------------
@@ -257,7 +255,7 @@ class FeatureClass:
         create_folder(self._label_dir)
 
         for file_cnt, file_name in enumerate(os.listdir(self._desc_dir)):
-            if len(file_name)!=26: #checking clean metadata files #TODO this is not required if the dataset is clean
+            if len(file_name)!=26: #checking clean metadata files #TODO this is not required if the DCASE2020 dataset is clean
                 continue
             wav_filename = '{}.wav'.format(file_name.split('.')[0])
             desc_file_polar = self.load_output_format_file(os.path.join(self._desc_dir, file_name))

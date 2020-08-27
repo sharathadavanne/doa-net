@@ -47,8 +47,10 @@ def get_params(argv='1'):
 
         nb_fnn_layers=1,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
-        branch_weights = [1, 1],
         nb_epochs=500,               # Train for maximum epochs
+
+        branch_weights=[1, 1],
+        use_dmotp_only=False
     )
     feature_label_resolution = int(params['label_hop_len_s'] // params['hop_len_s'])
     params['feature_sequence_length'] = params['label_sequence_length'] * feature_label_resolution

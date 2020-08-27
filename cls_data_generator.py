@@ -187,8 +187,8 @@ class DataGenerator(object):
                 feat = self._split_in_seqs(feat, self._feature_seq_len)
                 feat = np.transpose(feat, (0, 2, 1, 3))
                 label = self._split_in_seqs(label, self._label_seq_len)
-                label = label[:, :, :-1]
 
+                # randomly assign the labels to different regressors, to enable better learning of both regressors
                 if np.random.choice([0, 1]):
                     new_label = np.zeros(label.shape)
                     new_label[:, :, [0, 2, 4]] = label[:, :, [1, 3, 5]]
