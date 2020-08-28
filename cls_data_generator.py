@@ -38,6 +38,7 @@ class DataGenerator(object):
         self._label_batch_seq_len = self._batch_size*self._label_seq_len
         self._circ_buf_feat = None
         self._circ_buf_label = None
+        self._shuffle_regressors = params['shuffle_regressors']
 
         if self._per_file:
             self._nb_total_batches = len(self._filenames_list)
@@ -189,11 +190,12 @@ class DataGenerator(object):
                 label = self._split_in_seqs(label, self._label_seq_len)
 
                 # randomly assign the labels to different regressors, to enable better learning of both regressors
-                if np.random.choice([0, 1]):
-                    new_label = np.zeros(label.shape)
-                    new_label[:, :, [0, 2, 4]] = label[:, :, [1, 3, 5]]
-                    new_label[:, :, [1, 3, 5]] = label[:, :, [0, 2, 4]]
-                    label = new_label
+                if self._shuffle_regressors:
+                    if np.random.choice([0, 1]):
+                        new_label = np.zeros(label.shape)
+                        new_label[:, :, [0, 2, 4]] = label[:, :, [1, 3, 5]]
+                        new_label[:, :, [1, 3, 5]] = label[:, :, [0, 2, 4]]
+                        label = new_label
                 yield feat, label
 
     def _split_in_seqs(self, data, _seq_len):

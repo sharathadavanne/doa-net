@@ -50,7 +50,8 @@ def get_params(argv='1'):
         nb_epochs=500,               # Train for maximum epochs
 
         branch_weights=[1, 1],
-        use_dmotp_only=False
+        use_dmotp_only=False,
+        shuffle_regressors=False
     )
     feature_label_resolution = int(params['label_hop_len_s'] // params['hop_len_s'])
     params['feature_sequence_length'] = params['label_sequence_length'] * feature_label_resolution
@@ -62,6 +63,22 @@ def get_params(argv='1'):
     if argv == '1':
         print("USING DEFAULT PARAMETERS\n")
 
+    elif argv == '50':
+        params['use_dmotp_only']= True
+        params['shuffle_regressors']=True
+
+    elif argv == '51':
+        params['use_dmotp_only']= True
+        params['shuffle_regressors']=False
+
+    elif argv == '52':
+        params['use_dmotp_only']= False
+        params['shuffle_regressors']=True
+
+    elif argv == '53':
+        params['use_dmotp_only']= False
+        params['shuffle_regressors']= False
+    
     elif argv == '12':
         params['nb_cnn2d_filt'] = 32
         params['rnn_size'] = 32
