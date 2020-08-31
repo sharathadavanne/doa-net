@@ -137,7 +137,7 @@ def main(argv):
         hung_tr_loss_list = np.zeros(nb_epoch)
         hung_val_loss_list = np.zeros(nb_epoch)
 
-        optimizer = optim.Adam(model.parameters())
+        optimizer = optim.Adam(model.parameters(), lr=params['lr'])
         criterion1 = torch.nn.MSELoss()
         criterion2 = torch.nn.MSELoss()
 
@@ -200,7 +200,7 @@ def main(argv):
                 for loc_dist_mat in dist_mat_numpy:
                     row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
                     loc_hung_loss += loc_dist_mat[row_ind, col_ind].sum()
-                loc_hung_loss /= dist_mat_numpy.shape[0]
+                loc_hung_loss /= (dist_mat_numpy.shape[0] * dist_mat_numpy.shape[1])
 
                 train_hung_loss += loc_hung_loss
                 train_loss += loss.item()
@@ -267,7 +267,7 @@ def main(argv):
                     for loc_dist_mat in dist_mat_numpy:
                         row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
                         loc_hung_loss += loc_dist_mat[row_ind, col_ind].sum()
-                    loc_hung_loss /= dist_mat_numpy.shape[0]
+                    loc_hung_loss /= (dist_mat_numpy.shape[0] * dist_mat_numpy.shape[1])
 
                     test_hung_loss += loc_hung_loss
                     test_loss += loss.item()  # sum up batch loss
@@ -281,20 +281,20 @@ def main(argv):
             mse_b1 /= nb_test_batches
             mse_b2 /= nb_test_batches
 
-            if test_loss < best_val_loss:
-                best_val_loss = test_loss
+            if test_hung_loss < best_val_loss:
+                best_val_loss = test_hung_loss
                 best_val_epoch = epoch_cnt
                 torch.save(model.state_dict(), model_name)
 
             print(
                 'epoch: {}, time: {:0.2f}, '
                 'train_loss: {:0.2f}, val_loss: {:0.2f} {}, '
-                'train_hung_loss: {:0.2f}, test_hung_loss: {:0.2f}, '
+                'train_hung_loss_deg: {:0.2f}, test_hung_loss_deg: {:0.2f}, '
                 'best_val_epoch: {}'.format(
                     epoch_cnt, time.time()-start,
                     train_loss, test_loss,
                     '' if params['use_dmotp_only'] else '({:0.2f},{:0.2f},{:0.2f})'.format(dMOTP, mse_b1, mse_b2),
-                    train_hung_loss, test_hung_loss,
+                    180*train_hung_loss/np.pi, 180*test_hung_loss/np.pi,
                     best_val_epoch)
             )
 
