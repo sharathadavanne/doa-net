@@ -1,5 +1,5 @@
 #
-# A wrapper script that trains the SELDnet. The training stops when the early stopping metric - SELD error stops improving.
+# A wrapper script that trains the DOAnet. The training stops when the early stopping metric - SELD error stops improving.
 #
 
 import os
@@ -76,12 +76,14 @@ def main(argv):
 
     job_id = 1 if len(argv) < 3 else argv[-1]
 
+    # load Hungarian network for data association.
     hnet_model = HNetGRU(max_len=2).to(device)
     hnet_model.eval()
     hnet_model.load_state_dict(torch.load("models/hnet_model.pt" ))
     print('---------------- Hungarian-net -------------------')
     print(hnet_model)
 
+    # Training setup
     train_splits, val_splits, test_splits = None, None, None
     if params['mode'] == 'dev':
         test_splits = [1]
