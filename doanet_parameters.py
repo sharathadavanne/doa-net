@@ -52,7 +52,7 @@ def get_params(argv='1'):
         branch_weights=[1, 1],
         use_dmotp_only=False,
         binary_da=False,
-        shuffle_regressors=True
+        shuffle_regressors=False
     )
 
     # ########### User defined parameters ##############
