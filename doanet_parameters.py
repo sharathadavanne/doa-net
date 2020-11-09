@@ -38,20 +38,21 @@ def get_params(argv='1'):
         use_hnet=True,
         label_sequence_length=50,    # Feature sequence length
         batch_size=64,              # Batch size
-        dropout_rate=0,             # Dropout rate, constant for all layers
-        nb_cnn2d_filt=256,           # Number of CNN nodes, constant for each layer
+        dropout_rate=0.4,             # Dropout rate, constant for all layers
+        nb_cnn2d_filt=128,           # Number of CNN nodes, constant for each layer
         f_pool_size=[2, 2, 2],      # CNN frequency pooling, length of list = number of CNN layers, list value = pooling per layer
 
         nb_rnn_layers=2,
-        rnn_size=256,        # RNN contents, length of list = number of layers, list value = number of nodes
+        rnn_size=128,        # RNN contents, length of list = number of layers, list value = number of nodes
 
-        nb_fnn_layers=1,
+        nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
-        nb_epochs=1000,               # Train for maximum epochs
+        nb_epochs=500,               # Train for maximum epochs
         lr=1e-3,
         branch_weights=[1, 1],
         use_dmotp_only=False,
-        shuffle_regressors=False
+        binary_da=False,
+        shuffle_regressors=True
     )
 
     # ########### User defined parameters ##############
@@ -180,6 +181,9 @@ def get_params(argv='1'):
 
     elif argv =='79':
         params['use_hnet']=False
+
+    elif argv =='80':
+        params['binary_da']=True
 
     elif argv == '12':
         params['nb_cnn2d_filt'] = 32

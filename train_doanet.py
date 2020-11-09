@@ -161,8 +161,8 @@ def main(argv):
                 target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
                 # get unit vectors
-                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
-                target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
+#                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
+#                target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                 # get pair-wise distance matrix between predicted and reference.
                 dist_mat = torch.matmul(output, target.transpose(-1, -2))
@@ -177,7 +177,10 @@ def main(argv):
                         da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                         da_mat = da_mat.view(dist_mat.shape)
                         max_val, max_inds = da_mat.max(-1)
-
+                    
+                    if params['binary_da']:
+                        da_mat = (da_mat>0.5).float()
+                    
                     # Compute dMOTP loss for true positives
                     dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
                     if params['use_dmotp_only']:
@@ -226,8 +229,8 @@ def main(argv):
                     output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas).transpose(-1, -2)
                     target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
-                    target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
-                    target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
+                    #target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
+                    #target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                     # get pair-wise distance matrix between predicted and reference.
                     dist_mat = torch.matmul(output, target.transpose(-1, -2))
@@ -243,6 +246,9 @@ def main(argv):
                             da_mat = da_mat.view(dist_mat.shape)
                             max_val, max_inds = da_mat.max(-1)
 
+                        if params['binary_da']:
+                            da_mat = (da_mat>0.5).float()
+                    
                         # Compute dMOTP loss for true positives
                         dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
                         dMOTP += dist_loss
