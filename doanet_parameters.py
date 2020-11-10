@@ -45,6 +45,7 @@ def get_params(argv='1'):
         nb_rnn_layers=2,
         rnn_size=128,        # RNN contents, length of list = number of layers, list value = number of nodes
 
+        self_attn=False,
         nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
         nb_epochs=500,               # Train for maximum epochs
@@ -185,6 +186,9 @@ def get_params(argv='1'):
     elif argv =='80':
         params['binary_da']=True
 
+    elif argv =='81':
+        params['self_attn']=True
+
     elif argv == '12':
         params['nb_cnn2d_filt'] = 32
         params['rnn_size'] = 32
@@ -231,15 +235,12 @@ def get_params(argv='1'):
         params['dropout_rate'] = 0.5
 
     elif argv == '9':
-        params['dropout_rate'] = 0.15
         params['branch_weights'] = [1, 10]
 
     elif argv == '10':
-        params['dropout_rate'] = 0.15
         params['branch_weights'] = [1, 100]
 
     elif argv == '11':
-        params['dropout_rate'] = 0.15
         params['branch_weights'] = [1, 1000]
 
     elif argv == '999':
