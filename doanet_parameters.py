@@ -46,6 +46,8 @@ def get_params(argv='1'):
         rnn_size=128,        # RNN contents, length of list = number of layers, list value = number of nodes
 
         self_attn=False,
+        nb_heads=4,
+
         nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
         nb_epochs=500,               # Train for maximum epochs
@@ -187,7 +189,20 @@ def get_params(argv='1'):
         params['binary_da']=True
 
     elif argv =='81':
-        params['self_attn']=True
+        params['self_attn'] = True
+        params['nb_heads'] = 2
+
+    elif argv =='82':
+        params['self_attn'] = True
+        params['nb_heads'] = 4
+
+    elif argv =='83':
+        params['self_attn'] = True
+        params['nb_heads'] = 8
+
+    elif argv =='84':
+        params['self_attn'] = True
+        params['nb_heads'] = 16
 
     elif argv == '12':
         params['nb_cnn2d_filt'] = 32
