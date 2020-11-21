@@ -149,9 +149,9 @@ class FeatureClass:
         :param _desc_file: metadata description file
         :return: label_mat: of dimension [nb_frames, 3*max_classes], max_classes each for x, y, z axis,
         """
-        x_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
-        y_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
-        z_label = np.ones((self._max_label_frames, self._nb_unique_classes)) # default direction is along z-axis hence intialized to one
+        x_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
+        y_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
+        z_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
 
         for frame_ind, active_event_list in _desc_file.items():
             if frame_ind < self._max_label_frames:
