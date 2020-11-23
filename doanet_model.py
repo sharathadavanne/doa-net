@@ -181,9 +181,10 @@ class CRNN(torch.nn.Module):
         if self.attn is not None:
             x = self.attn.forward(x, x, x)
             # out - batch x hidden x seq
-            x = torch.relu_(x)
+            x = torch.tanh(x)
 
-        for fnn_cnt in range(len(self.fnn_list)):
-            x = self.fnn_list[fnn_cnt](x)
+        for fnn_cnt in range(len(self.fnn_list)-1):
+            x = torch.relu_(self.fnn_list[fnn_cnt](x))
+        x = self.fnn_list[-1](x)
         '''(batch_size, time_steps, label_dim)'''
         return x

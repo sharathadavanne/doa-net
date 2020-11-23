@@ -124,7 +124,7 @@ def main(argv):
             params['fnn_size']))
 
         model = doanet_model.CRNN(data_in, data_out, params).to(device)
-        model.load_state_dict(torch.load("/home/sharath/PycharmProjects/doa-net/models/50_4099991_foa_dev_split1_model.h5", map_location='cpu'))
+        # model.load_state_dict(torch.load("/home/sharath/PycharmProjects/doa-net/models/50_4099991_foa_dev_split1_model.h5", map_location='cpu'))
         print('---------------- DOA-net -------------------')
         print(model)
         best_val_loss = 99999
@@ -149,7 +149,7 @@ def main(argv):
 
             # TRAINING
             model.train()
-            train_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_doa = 0., 0., 0., 0, 0
+            train_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_doa, train_recall_doa = 0., 0., 0., 0, 0, 0
             for data, target in data_gen_train.generate():
                 optimizer.zero_grad()
                 nb_framewise_doas_gt = target[:, :, -1].reshape(-1)
@@ -167,10 +167,13 @@ def main(argv):
 #                target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                 # get pair-wise distance matrix between predicted and reference.
-                dist_mat = torch.matmul(output, target.transpose(-1, -2))
+
+                output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
+                dist_mat = torch.cdist(output.contiguous(), target.contiguous())
+                # dist_mat = torch.matmul(output, target.transpose(-1, -2))
                 # dist_mat = torch.clamp(dist_mat, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
                 # dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
-                dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
+                # dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
 
                 if params['use_hnet']:
                     with torch.no_grad():
@@ -182,7 +185,7 @@ def main(argv):
                     
                     if params['binary_da']:
                         da_mat = (da_mat>0.5).float()
-                    
+
                     # Compute dMOTP loss for true positives
                     dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
                     if params['use_dmotp_only']:
@@ -226,11 +229,11 @@ def main(argv):
                     break
             train_hung_loss /= nb_train_batches
             train_loss /= nb_train_batches
-            train_tp_doa /= (float(train_total_doa) + eps)
+            train_recall_doa = train_tp_doa / (float(train_total_doa) + eps)
 
             ## TESTING
             model.eval()
-            test_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_doa = 0., 0., 0., 0, 0
+            test_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_doa, test_recall_doa = 0., 0., 0., 0, 0, 0
             dMOTP, mse_b1, mse_b2 = 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
@@ -247,10 +250,12 @@ def main(argv):
                     #target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
 
                     # get pair-wise distance matrix between predicted and reference.
-                    dist_mat = torch.matmul(output, target.transpose(-1, -2))
+                    output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
+                    dist_mat = torch.cdist(output.contiguous(), target.contiguous())
+                    # dist_mat = torch.matmul(output, target.transpose(-1, -2))
                     # dist_mat = torch.clamp(dist_mat, -1+eps, 1-eps)
                     # dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
-                    dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
+                    # dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
 
                     if params['use_hnet']:
                         with torch.no_grad():
@@ -309,7 +314,7 @@ def main(argv):
 
             test_hung_loss /= nb_test_batches
             test_loss /= nb_test_batches
-            test_tp_doa /= (float(test_total_doa) + eps)
+            test_recall_doa = test_tp_doa / (float(test_total_doa) + eps)
             dMOTP /= nb_test_batches
             mse_b1 /= nb_test_batches
             mse_b2 /= nb_test_batches
@@ -322,12 +327,12 @@ def main(argv):
             print(
                 'epoch: {}, time: {:0.2f}, '
                 'train_loss: {:0.2f}, val_loss: {:0.2f} {}, '
-                'train_hung_loss: {:0.2f}/{:0.3f}, test_hung_loss_deg: {:0.2f}/{:0.3f}, '
+                'train_hung_loss: {}/{}/{:0.2f}/{:0.3f}, test_hung_loss_deg: {}/{}/{:0.2f}/{:0.3f}, '
                 'best_val_epoch: {}'.format(
                     epoch_cnt, time.time()-start,
                     train_loss, test_loss,
                     '' if params['use_dmotp_only'] else '({:0.2f},{:0.2f},{:0.2f})'.format(dMOTP, mse_b1, mse_b2),
-                    train_tp_doa*100.0, 180*train_hung_loss/np.pi, test_tp_doa*100.0, 180*test_hung_loss/np.pi,
+                    train_tp_doa, train_total_doa, train_recall_doa*100.0, 180*train_hung_loss/np.pi, test_tp_doa, test_total_doa, test_recall_doa*100.0, 180*test_hung_loss/np.pi,
                     best_val_epoch)
             )
 
