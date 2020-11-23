@@ -152,14 +152,15 @@ class FeatureClass:
         x_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
         y_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
         z_label = np.random.uniform(low=-100, high=100, size=(self._max_label_frames, self._nb_unique_classes))
-
+        nb_classes = np.zeros((self._max_label_frames, 1))
         for frame_ind, active_event_list in _desc_file.items():
             if frame_ind < self._max_label_frames:
+                nb_classes[frame_ind] = len(active_event_list)
                 for active_event in range(len(active_event_list)):
                     x_label[frame_ind, active_event] = active_event_list[active_event][1]
                     y_label[frame_ind, active_event] = active_event_list[active_event][2]
                     z_label[frame_ind, active_event] = active_event_list[active_event][3]
-        label_mat = np.concatenate((x_label, y_label, z_label), axis=1)
+        label_mat = np.concatenate((x_label, y_label, z_label, nb_classes), axis=1)
         return label_mat
 
     # ------------------------------- EXTRACT FEATURE AND PREPROCESS IT -------------------------------
