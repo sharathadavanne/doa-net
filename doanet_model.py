@@ -163,6 +163,13 @@ class CRNN(torch.nn.Module):
             torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], out_shape[-1], bias=True)
         )
 
+        self.fnn_list.append(
+            torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['fnn_size'], bias=True)
+        )
+        
+        self.fnn_list.append(
+            torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
+        )
     def forward(self, x):
         '''input: (batch_size, mic_channels, time_steps, mel_bins)'''
 
@@ -182,9 +189,11 @@ class CRNN(torch.nn.Module):
             x = self.attn.forward(x, x, x)
             # out - batch x hidden x seq
             x = torch.tanh(x)
-
-        for fnn_cnt in range(len(self.fnn_list)-1):
+        x_rnn = x
+        for fnn_cnt in range(len(self.fnn_list)-3):
             x = torch.relu_(self.fnn_list[fnn_cnt](x))
-        x = self.fnn_list[-1](x)
+        doa = self.fnn_list[-3](x)
+        activity = torch.relu_(self.fnn_list[-2](x_rnn))
+        activity = self.fnn_list[-1](activity)
         '''(batch_size, time_steps, label_dim)'''
-        return x
+        return doa, activity

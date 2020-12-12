@@ -142,6 +142,7 @@ def main(argv):
         optimizer = optim.Adam(model.parameters(), lr=params['lr'])
         criterion1 = torch.nn.MSELoss()
         criterion2 = torch.nn.MSELoss()
+        activity_loss = nn.BCEWithLogitsLoss()
 
         # start training
         for epoch_cnt in range(nb_epoch):
@@ -149,24 +150,24 @@ def main(argv):
 
             # TRAINING
             model.train()
-            train_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_gt_doa, train_total_pred_doa, train_recall_doa, train_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0.
+            train_loss, train_dMOTP_loss, train_act_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_gt_doa, train_total_pred_doa, train_recall_doa, train_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.
             for data, target in data_gen_train.generate():
                 optimizer.zero_grad()
                 nb_framewise_doas_gt = target[:, :, -1].reshape(-1)
                 data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
-                output = model(data)
+                output, activity_out = model(data)
 
                 # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)
                 max_nb_doas = output.shape[2]//3
                 output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas).transpose(-1, -2)
                 target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
-
+                
                 # get pair-wise distance matrix between predicted and reference.
-                output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
+                output, target, activity_out = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1]), activity_out.view(-1, activity_out.shape[-1])
                 dist_mat = torch.cdist(output.contiguous(), target.contiguous())
 
                 # hungarian loss
-                dist_mat_hung = torch.matmul(output, target.transpose(-1, -2))
+                dist_mat_hung = torch.matmul(output.detach(), target.transpose(-1, -2))
                 dist_mat_hung = torch.clamp(dist_mat_hung, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
                 dist_mat_hung = torch.acos(dist_mat_hung)  # (batch, sequence, max_nb_doas, max_nb_doas)
 
@@ -176,27 +177,23 @@ def main(argv):
                         da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
                         da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                         da_mat = da_mat.view(dist_mat.shape)
-                        da_mat = (da_mat>0.5).float()
+                        da_mat = (da_mat>0.5).float().detach()
+                    
                     # Compute dMOTP loss for true positives
                     dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
                     if params['use_dmotp_only']:
-                        loss = dist_loss
+                        loss = dist_loss 
                     else:
-                        output = output.view(-1, output.shape[-2], output.shape[-1])
-                        target2 = 10*torch.ones((output.shape)).to(device)
-                       
-                        loc_ind = torch.where(da_mat==1)
-                        target2[loc_ind[0], loc_ind[2], :] = target[loc_ind[0], loc_ind[1], :] 
-#                        embed()
-                        mse1 = criterion1(output[:, 0, :], target2[:, 0, :])
-                        mse2 = criterion2(output[:, 1, :], target2[:, 1, :])
-                        loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
+                        act_loss = activity_loss(activity_out, da_mat.max(-1)[0])
+                        loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * act_loss
+                        train_dMOTP_loss += dist_loss.item()
+                        train_act_loss += act_loss.item()
                 else:
                     loss = criterion1(output, target)
                 loss.backward()
                 optimizer.step()
 
-                da_mat_numpy = (da_mat > 0.5).cpu().detach().numpy().astype(int)
+                da_mat_numpy = da_mat.cpu().detach().numpy().astype(int)
                 dist_mat_numpy = dist_mat_hung.cpu().detach().numpy()
                 train_hung_loss += np.multiply(dist_mat_numpy, da_mat_numpy).sum()
                 train_loss += loss.item()
@@ -206,19 +203,22 @@ def main(argv):
                 nb_train_batches += 1
                 if params['quick_test'] and nb_train_batches == 4:
                     break
-            train_hung_loss /= train_tp_doa
+            train_hung_loss /= train_total_pred_doa
             train_loss /= nb_train_batches
+            train_act_loss /= nb_train_batches
+            train_dMOTP_loss /= nb_train_batches
             train_recall_doa = train_tp_doa / (float(train_total_gt_doa) + eps)
             train_precision_doa = train_tp_doa / (float(train_total_pred_doa) + eps)
+
+
             ## TESTING
             model.eval()
-            test_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_gt_doa, test_total_pred_doa, test_recall_doa, test_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0.
-            dMOTP, mse_b1, mse_b2 = 0., 0., 0.
+            test_loss, test_act_loss, test_dMOTP_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_gt_doa, test_total_pred_doa, test_recall_doa, test_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
                     nb_framewise_doas_gt = target[:, :, -1].reshape(-1)
                     data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
-                    output = model(data)
+                    output, activity_out = model(data)
 
                     # (batch, sequence, max_nb_doas*3) to (batch, sequence, max_nb_doas, 3)
                     max_nb_doas = output.shape[2]//3
@@ -226,11 +226,11 @@ def main(argv):
                     target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
                     # get pair-wise distance matrix between predicted and reference.
-                    output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
+                    output, target, activity_out = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1]), activity_out.view(-1, activity_out.shape[-1])
                     dist_mat = torch.cdist(output.contiguous(), target.contiguous())
 
                     # hungarian loss
-                    dist_mat_hung = torch.matmul(output, target.transpose(-1, -2))
+                    dist_mat_hung = torch.matmul(output.detach(), target.transpose(-1, -2))
                     dist_mat_hung = torch.clamp(dist_mat_hung, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
                     dist_mat_hung = torch.acos(dist_mat_hung)  # (batch, sequence, max_nb_doas, max_nb_doas)
 
@@ -240,31 +240,21 @@ def main(argv):
                             da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
                             da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                             da_mat = da_mat.view(dist_mat.shape)
-                            da_mat = (da_mat>0.5).float()
+                            da_mat = (da_mat>0.5).float().detach()
                     
                         # Compute dMOTP loss for true positives
                         dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
-                        dMOTP += dist_loss
                         if params['use_dmotp_only']:
-                            loss = dist_loss
+                            loss = dist_loss 
                         else:
-                            output = output.view(-1, output.shape[-2], output.shape[-1])
-
-                            target2 = 10* torch.ones((output.shape)).to(device)
-                       
-                            loc_ind = torch.where(da_mat==1)
-                            target2[loc_ind[0], loc_ind[2], :] = target[loc_ind[0], loc_ind[1], :] 
-
-                            mse1 = criterion1(output[:, 0, :], target2[:, 0, :])
-                            mse2 = criterion2(output[:, 1, :], target2[:, 1, :])
-                            loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
-
-                            mse_b1 += mse1
-                            mse_b2 += mse2
+                            act_loss = activity_loss(activity_out, da_mat.max(-1)[0])
+                            loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * act_loss
+                            test_act_loss += act_loss.item()
+                            test_dMOTP_loss += dist_loss.item()
                     else:
                         loss = criterion1(output, target)
 
-                    da_mat_numpy = (da_mat > 0.5).cpu().detach().numpy().astype(int)
+                    da_mat_numpy = da_mat.cpu().detach().numpy().astype(int)
                     dist_mat_numpy = dist_mat_hung.cpu().detach().numpy()
 
                     test_hung_loss += np.multiply(dist_mat_numpy, da_mat_numpy).sum()
@@ -276,13 +266,12 @@ def main(argv):
                     if params['quick_test'] and nb_test_batches == 2:
                         break
 
-            test_hung_loss /= test_tp_doa
+            test_hung_loss /= test_total_pred_doa
             test_loss /= nb_test_batches
             test_recall_doa = test_tp_doa / (float(test_total_gt_doa) + eps)
             test_precision_doa = test_tp_doa / (float(test_total_pred_doa) + eps)
-            dMOTP /= nb_test_batches
-            mse_b1 /= nb_test_batches
-            mse_b2 /= nb_test_batches
+            test_dMOTP_loss /= nb_test_batches
+            test_act_loss /= nb_test_batches
 
             if test_hung_loss < best_val_loss:
                 best_val_loss = test_hung_loss
@@ -291,12 +280,14 @@ def main(argv):
 
             print(
                 'epoch: {}, time: {:0.2f}, '
-                'train_loss: {:0.2f}, val_loss: {:0.2f} {}, '
+                'train_loss: {:0.2f} {}, val_loss: {:0.2f} {}, '
                 'train_hung_loss: {:0.2f}/{:0.2f}/{:0.3f}, test_hung_loss_deg: {:0.2f}/{:0.2f}/{:0.3f}, '
                 'best_val_epoch: {}'.format(
                     epoch_cnt, time.time()-start,
-                    train_loss, test_loss,
-                    '' if params['use_dmotp_only'] else '({:0.2f},{:0.2f},{:0.2f})'.format(dMOTP, mse_b1, mse_b2),
+                    train_loss,
+                    '' if params['use_hnet'] and params['use_dmotp_only'] else '({:0.2f},{:0.2f})'.format(train_dMOTP_loss, train_act_loss),
+                    test_loss,
+                    '' if params['use_hnet'] and params['use_dmotp_only'] else '({:0.2f},{:0.2f})'.format(test_dMOTP_loss, test_act_loss),
                     train_precision_doa*100.0, train_recall_doa*100.0, 180*train_hung_loss/np.pi, test_precision_doa*100.0, test_recall_doa*100.0, 180*test_hung_loss/np.pi,
                     best_val_epoch)
             )

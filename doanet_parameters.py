@@ -52,8 +52,8 @@ def get_params(argv='1'):
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
         nb_epochs=500,               # Train for maximum epochs
         lr=1e-3,
-        branch_weights=[1, 1],
-        use_dmotp_only=True,
+        branch_weights=[100., 1],
+        use_dmotp_only=False,
         binary_da=False,
         shuffle_regressors=False
     )
@@ -249,14 +249,23 @@ def get_params(argv='1'):
     elif argv == '8':
         params['dropout_rate'] = 0.5
 
-    elif argv == '9':
+    elif argv == '85':
         params['branch_weights'] = [1, 10]
 
-    elif argv == '10':
+    elif argv == '86':
         params['branch_weights'] = [1, 100]
 
-    elif argv == '11':
+    elif argv == '87':
         params['branch_weights'] = [1, 1000]
+
+    elif argv == '88':
+        params['branch_weights'] = [10, 1]
+
+    elif argv == '89':
+        params['branch_weights'] = [100, 1]
+
+    elif argv == '90':
+        params['branch_weights'] = [1000, 1]
 
     elif argv == '999':
         print("QUICK TEST MODE\n")
