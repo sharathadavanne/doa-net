@@ -17,8 +17,8 @@ import torch.nn as nn
 import torch.optim as optim
 plot.switch_backend('agg')
 from IPython import embed
-# sys.path.insert(0,'/users/sadavann/hungarian-net')
-sys.path.insert(0,'/home/sharath/PycharmProjects/hungarian-net')
+sys.path.insert(0,'/users/sadavann/hungarian-net')
+#sys.path.insert(0,'/home/sharath/PycharmProjects/hungarian-net')
 from train_hnet import HNetGRU
 from scipy.optimize import linear_sum_assignment
 
@@ -124,7 +124,7 @@ def main(argv):
             params['fnn_size']))
 
         model = doanet_model.CRNN(data_in, data_out, params).to(device)
-        # model.load_state_dict(torch.load("/home/sharath/PycharmProjects/doa-net/models/50_4099991_foa_dev_split1_model.h5", map_location='cpu'))
+       # model.load_state_dict(torch.load("models/1_1_foa_dev_split1_model.h5", map_location='cpu'))
         print('---------------- DOA-net -------------------')
         print(model)
         best_val_loss = 99999
@@ -149,31 +149,26 @@ def main(argv):
 
             # TRAINING
             model.train()
-            train_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_doa, train_recall_doa = 0., 0., 0., 0, 0, 0
+            train_loss, train_hung_loss, nb_train_batches, train_tp_doa, train_total_gt_doa, train_total_pred_doa, train_recall_doa, train_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0.
             for data, target in data_gen_train.generate():
                 optimizer.zero_grad()
                 nb_framewise_doas_gt = target[:, :, -1].reshape(-1)
                 data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-1]).to(device).float()
                 output = model(data)
 
-
                 # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)
                 max_nb_doas = output.shape[2]//3
                 output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas).transpose(-1, -2)
                 target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
-                # get unit vectors
-#                target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
-#                target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
-
                 # get pair-wise distance matrix between predicted and reference.
-
                 output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
                 dist_mat = torch.cdist(output.contiguous(), target.contiguous())
-                # dist_mat = torch.matmul(output, target.transpose(-1, -2))
-                # dist_mat = torch.clamp(dist_mat, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
-                # dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
-                # dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
+
+                # hungarian loss
+                dist_mat_hung = torch.matmul(output, target.transpose(-1, -2))
+                dist_mat_hung = torch.clamp(dist_mat_hung, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
+                dist_mat_hung = torch.acos(dist_mat_hung)  # (batch, sequence, max_nb_doas, max_nb_doas)
 
                 if params['use_hnet']:
                     with torch.no_grad():
@@ -181,24 +176,20 @@ def main(argv):
                         da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
                         da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                         da_mat = da_mat.view(dist_mat.shape)
-                        max_val, max_inds = da_mat.max(-1)
-                    
-                    if params['binary_da']:
                         da_mat = (da_mat>0.5).float()
-
                     # Compute dMOTP loss for true positives
                     dist_loss = torch.mean(torch.mul(dist_mat, da_mat))
                     if params['use_dmotp_only']:
                         loss = dist_loss
                     else:
-                        target = target.view(-1, target.shape[-2], target.shape[-1])
                         output = output.view(-1, output.shape[-2], output.shape[-1])
-
-                        target1 = target[np.arange(max_inds.shape[0]), max_inds[:, 0]]
-                        target2 = target[np.arange(max_inds.shape[0]), max_inds[:, 1]]
-
-                        mse1 = criterion1(output[:, 0, :], target1)
-                        mse2 = criterion2(output[:, 1, :], target2)
+                        target2 = 10*torch.ones((output.shape)).to(device)
+                       
+                        loc_ind = torch.where(da_mat==1)
+                        target2[loc_ind[0], loc_ind[2], :] = target[loc_ind[0], loc_ind[1], :] 
+#                        embed()
+                        mse1 = criterion1(output[:, 0, :], target2[:, 0, :])
+                        mse2 = criterion2(output[:, 1, :], target2[:, 1, :])
                         loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
                 else:
                     loss = criterion1(output, target)
@@ -206,34 +197,22 @@ def main(argv):
                 optimizer.step()
 
                 da_mat_numpy = (da_mat > 0.5).cpu().detach().numpy().astype(int)
-                dist_mat_numpy = dist_mat.cpu().detach().numpy()
-                dist_mat_numpy = np.clip(dist_mat_numpy, -1, 1)
-                dist_mat_numpy = np.arccos(dist_mat_numpy)
-
-                loc_tp_doa = 0
-                loc_hung_loss = 0.0
-                for ind, loc_dist_mat in enumerate(dist_mat_numpy):
-                    loc_tp = min(nb_framewise_doas_gt[ind], da_mat_numpy[ind].sum())
-                    if loc_tp:
-                        loc_tp_doa += loc_tp
-                        row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
-                        loc_hung_loss += np.multiply(loc_dist_mat[row_ind, col_ind], da_mat_numpy[ind]).sum()
-                        loc_hung_loss /= loc_tp
-
-                train_hung_loss += loc_hung_loss
+                dist_mat_numpy = dist_mat_hung.cpu().detach().numpy()
+                train_hung_loss += np.multiply(dist_mat_numpy, da_mat_numpy).sum()
                 train_loss += loss.item()
-                train_tp_doa += loc_tp_doa
-                train_total_doa += nb_framewise_doas_gt.sum()
+                train_tp_doa += np.min((nb_framewise_doas_gt, da_mat_numpy.sum(-1).sum(-1)), 0).sum()
+                train_total_pred_doa += da_mat_numpy.sum()
+                train_total_gt_doa += nb_framewise_doas_gt.sum()
                 nb_train_batches += 1
                 if params['quick_test'] and nb_train_batches == 4:
                     break
-            train_hung_loss /= nb_train_batches
+            train_hung_loss /= train_tp_doa
             train_loss /= nb_train_batches
-            train_recall_doa = train_tp_doa / (float(train_total_doa) + eps)
-
+            train_recall_doa = train_tp_doa / (float(train_total_gt_doa) + eps)
+            train_precision_doa = train_tp_doa / (float(train_total_pred_doa) + eps)
             ## TESTING
             model.eval()
-            test_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_doa, test_recall_doa = 0., 0., 0., 0, 0, 0
+            test_loss, test_hung_loss, nb_test_batches, test_tp_doa, test_total_gt_doa, test_total_pred_doa, test_recall_doa, test_precision_doa = 0., 0., 0., 0., 0., 0., 0., 0.
             dMOTP, mse_b1, mse_b2 = 0., 0., 0.
             with torch.no_grad():
                 for data, target in data_gen_val.generate():
@@ -246,16 +225,14 @@ def main(argv):
                     output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas).transpose(-1, -2)
                     target = target.view(target.shape[0], target.shape[1], 3, max_nb_doas).transpose(-1, -2)
 
-                    #target_norm, output_norm = torch.sqrt(torch.sum(target**2, -1) + eps), torch.sqrt(torch.sum(output**2, -1) + eps)
-                    #target, output = target/target_norm.unsqueeze(-1), output/output_norm.unsqueeze(-1)
-
                     # get pair-wise distance matrix between predicted and reference.
                     output, target = output.view(-1, output.shape[-2], output.shape[-1]), target.view(-1, target.shape[-2], target.shape[-1])
                     dist_mat = torch.cdist(output.contiguous(), target.contiguous())
-                    # dist_mat = torch.matmul(output, target.transpose(-1, -2))
-                    # dist_mat = torch.clamp(dist_mat, -1+eps, 1-eps)
-                    # dist_mat = torch.acos(dist_mat)  # (batch, sequence, max_nb_doas, max_nb_doas)
-                    # dist_mat = dist_mat.view(-1, max_nb_doas, max_nb_doas)   # (batch*sequence, max_nb_doas, max_nb_doas)
+
+                    # hungarian loss
+                    dist_mat_hung = torch.matmul(output, target.transpose(-1, -2))
+                    dist_mat_hung = torch.clamp(dist_mat_hung, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
+                    dist_mat_hung = torch.acos(dist_mat_hung)  # (batch, sequence, max_nb_doas, max_nb_doas)
 
                     if params['use_hnet']:
                         with torch.no_grad():
@@ -263,9 +240,6 @@ def main(argv):
                             da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
                             da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                             da_mat = da_mat.view(dist_mat.shape)
-                            max_val, max_inds = da_mat.max(-1)
-
-                        if params['binary_da']:
                             da_mat = (da_mat>0.5).float()
                     
                         # Compute dMOTP loss for true positives
@@ -274,14 +248,15 @@ def main(argv):
                         if params['use_dmotp_only']:
                             loss = dist_loss
                         else:
-                            target = target.view(-1, target.shape[-2], target.shape[-1])
                             output = output.view(-1, output.shape[-2], output.shape[-1])
 
-                            target1 = target[np.arange(max_inds.shape[0]), max_inds[:, 0]]
-                            target2 = target[np.arange(max_inds.shape[0]), max_inds[:, 1]]
+                            target2 = 10* torch.ones((output.shape)).to(device)
+                       
+                            loc_ind = torch.where(da_mat==1)
+                            target2[loc_ind[0], loc_ind[2], :] = target[loc_ind[0], loc_ind[1], :] 
 
-                            mse1 = criterion1(output[:, 0, :], target1)
-                            mse2 = criterion2(output[:, 1, :], target2)
+                            mse1 = criterion1(output[:, 0, :], target2[:, 0, :])
+                            mse2 = criterion2(output[:, 1, :], target2[:, 1, :])
                             loss = params['branch_weights'][0] * dist_loss + params['branch_weights'][1] * mse1 + params['branch_weights'][1] * mse2
 
                             mse_b1 += mse1
@@ -290,31 +265,21 @@ def main(argv):
                         loss = criterion1(output, target)
 
                     da_mat_numpy = (da_mat > 0.5).cpu().detach().numpy().astype(int)
-                    dist_mat_numpy = dist_mat.cpu().detach().numpy()
-                    dist_mat_numpy = np.clip(dist_mat_numpy, -1, 1)
-                    dist_mat_numpy = np.arccos(dist_mat_numpy)
+                    dist_mat_numpy = dist_mat_hung.cpu().detach().numpy()
 
-                    loc_tp_doa = 0
-                    loc_hung_loss = 0.0
-                    for ind, loc_dist_mat in enumerate(dist_mat_numpy):
-                        loc_tp = min(nb_framewise_doas_gt[ind], da_mat_numpy[ind].sum())
-                        if loc_tp:
-                            loc_tp_doa += loc_tp
-                            row_ind, col_ind = linear_sum_assignment(loc_dist_mat)
-                            loc_hung_loss += np.multiply(loc_dist_mat[row_ind, col_ind], da_mat_numpy[ind]).sum()
-                            loc_hung_loss /= loc_tp
-
-                    test_hung_loss += loc_hung_loss
-                    test_loss += loss.item()  # sum up batch loss
-                    test_tp_doa += loc_tp_doa
-                    test_total_doa += nb_framewise_doas_gt.sum()
+                    test_hung_loss += np.multiply(dist_mat_numpy, da_mat_numpy).sum()
+                    test_loss += loss.item()
+                    test_tp_doa += np.min((nb_framewise_doas_gt, da_mat_numpy.sum(-1).sum(-1)), 0).sum()
+                    test_total_gt_doa += nb_framewise_doas_gt.sum()
+                    test_total_pred_doa += da_mat_numpy.sum()
                     nb_test_batches += 1
                     if params['quick_test'] and nb_test_batches == 2:
                         break
 
-            test_hung_loss /= nb_test_batches
+            test_hung_loss /= test_tp_doa
             test_loss /= nb_test_batches
-            test_recall_doa = test_tp_doa / (float(test_total_doa) + eps)
+            test_recall_doa = test_tp_doa / (float(test_total_gt_doa) + eps)
+            test_precision_doa = test_tp_doa / (float(test_total_pred_doa) + eps)
             dMOTP /= nb_test_batches
             mse_b1 /= nb_test_batches
             mse_b2 /= nb_test_batches
@@ -327,12 +292,12 @@ def main(argv):
             print(
                 'epoch: {}, time: {:0.2f}, '
                 'train_loss: {:0.2f}, val_loss: {:0.2f} {}, '
-                'train_hung_loss: {}/{}/{:0.2f}/{:0.3f}, test_hung_loss_deg: {}/{}/{:0.2f}/{:0.3f}, '
+                'train_hung_loss: {:0.2f}/{:0.2f}/{:0.3f}, test_hung_loss_deg: {:0.2f}/{:0.2f}/{:0.3f}, '
                 'best_val_epoch: {}'.format(
                     epoch_cnt, time.time()-start,
                     train_loss, test_loss,
                     '' if params['use_dmotp_only'] else '({:0.2f},{:0.2f},{:0.2f})'.format(dMOTP, mse_b1, mse_b2),
-                    train_tp_doa, train_total_doa, train_recall_doa*100.0, 180*train_hung_loss/np.pi, test_tp_doa, test_total_doa, test_recall_doa*100.0, 180*test_hung_loss/np.pi,
+                    train_precision_doa*100.0, train_recall_doa*100.0, 180*train_hung_loss/np.pi, test_precision_doa*100.0, test_recall_doa*100.0, 180*test_hung_loss/np.pi,
                     best_val_epoch)
             )
 
