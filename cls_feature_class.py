@@ -105,6 +105,19 @@ class FeatureClass:
         mel_feat = mel_feat.reshape((linear_spectra.shape[0], self._nb_mel_bins * linear_spectra.shape[-1]))
         return mel_feat
 
+    def _get_foa_intensity_vectors2(self, linear_spectra):
+        W = linear_spectra[:, :, 0]
+        I = np.real(np.conj(W)[:, :, np.newaxis] * linear_spectra[:, :, 1:])
+        E = self._eps + (np.abs(W)**2 + ((np.abs(linear_spectra[:, :, 1:])**2).sum(-1))/3.0 )
+        
+        I_norm = I/E[:, :, np.newaxis]
+        I_norm_mel = np.transpose(np.dot(np.transpose(I_norm, (0,2,1)), self._mel_wts), (0,2,1))
+        foa_iv = I_norm_mel.reshape((linear_spectra.shape[0], self._nb_mel_bins * 3))
+        if np.isnan(foa_iv).any():
+            print('Feature extraction is generating nan outputs')
+            exit()
+        return foa_iv
+
     def _get_foa_intensity_vectors(self, linear_spectra):
         IVx = np.real(np.conj(linear_spectra[:, :, 0]) * linear_spectra[:, :, 1])
         IVy = np.real(np.conj(linear_spectra[:, :, 0]) * linear_spectra[:, :, 2])
@@ -187,7 +200,7 @@ class FeatureClass:
             feat = None
             if self._dataset is 'foa':
                 # extract intensity vectors
-                foa_iv = self._get_foa_intensity_vectors(spect)
+                foa_iv = self._get_foa_intensity_vectors2(spect)
                 feat = np.concatenate((mel_spect, foa_iv), axis=-1)
             elif self._dataset is 'mic':
                 # extract gcc

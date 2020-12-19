@@ -162,12 +162,15 @@ class CRNN(torch.nn.Module):
         self.fnn_list.append(
             torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], out_shape[-1], bias=True)
         )
+       
+        # Branch for activity detection 
+        self.fnn_act_list = torch.nn.ModuleList()
 
-        self.fnn_list.append(
-            torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['fnn_size'], bias=True)
+        self.fnn_act_list.append(
+            torch.nn.Linear(params['rnn_size'] , params['fnn_size'], bias=True)
         )
         
-        self.fnn_list.append(
+        self.fnn_act_list.append(
             torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
         )
     def forward(self, x):
@@ -190,10 +193,11 @@ class CRNN(torch.nn.Module):
             # out - batch x hidden x seq
             x = torch.tanh(x)
         x_rnn = x
-        for fnn_cnt in range(len(self.fnn_list)-3):
+        for fnn_cnt in range(len(self.fnn_list)-1):
             x = torch.relu_(self.fnn_list[fnn_cnt](x))
-        doa = self.fnn_list[-3](x)
-        activity = torch.relu_(self.fnn_list[-2](x_rnn))
-        activity = self.fnn_list[-1](activity)
+        doa = self.fnn_list[-1](x)
+        
+        activity = torch.relu_(self.fnn_act_list[0](x_rnn))
+        activity = self.fnn_act_list[1](activity)
         '''(batch_size, time_steps, label_dim)'''
         return doa, activity

@@ -38,7 +38,7 @@ def get_params(argv='1'):
         use_hnet=True,
         label_sequence_length=50,    # Feature sequence length
         batch_size=64,              # Batch size
-        dropout_rate=0.4,             # Dropout rate, constant for all layers
+        dropout_rate=0.15,             # Dropout rate, constant for all layers
         nb_cnn2d_filt=128,           # Number of CNN nodes, constant for each layer
         f_pool_size=[2, 2, 2],      # CNN frequency pooling, length of list = number of CNN layers, list value = pooling per layer
 
@@ -50,11 +50,13 @@ def get_params(argv='1'):
 
         nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
-        nb_epochs=500,               # Train for maximum epochs
+        nb_epochs=250,               # Train for maximum epochs
         lr=1e-3,
-        branch_weights=[100., 1],
-        use_dmotp_only=False,
-        binary_da=False,
+        branch_weights=[1, 1],
+        dMOTP_wt = 1,
+        dMOTA_wt = 1,
+        IDS_wt = 1,
+        use_dmot_only=False,
         shuffle_regressors=False
     )
 
@@ -250,13 +252,13 @@ def get_params(argv='1'):
         params['dropout_rate'] = 0.5
 
     elif argv == '85':
-        params['branch_weights'] = [1, 10]
+        params['dMOTA_wt'] = 1
 
     elif argv == '86':
-        params['branch_weights'] = [1, 100]
+        params['dMOTA_wt'] = 10
 
     elif argv == '87':
-        params['branch_weights'] = [1, 1000]
+        params['dMOTA_wt'] = 100
 
     elif argv == '88':
         params['branch_weights'] = [10, 1]
@@ -266,6 +268,24 @@ def get_params(argv='1'):
 
     elif argv == '90':
         params['branch_weights'] = [1000, 1]
+
+    elif argv == '91':
+        params['IDS_wt'] = 1
+
+    elif argv == '92':
+        params['IDS_wt'] = 10
+
+    elif argv == '93':
+        params['IDS_wt'] = 100
+
+    elif argv == '94':
+        params['dMOTP_wt'] = 1
+
+    elif argv == '95':
+        params['dMOTP_wt'] = 10
+
+    elif argv == '96':
+        params['dMOTP_wt'] = 100
 
     elif argv == '999':
         print("QUICK TEST MODE\n")
