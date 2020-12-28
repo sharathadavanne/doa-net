@@ -10,7 +10,8 @@ import doanet_parameters
 import torch
 from IPython import embed
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
+#matplotlib.use('TkAgg')
 import matplotlib.pyplot as plot
 
 
@@ -27,12 +28,12 @@ def main(argv):
         params=params, split=1, shuffle=False, per_file=params['dcase_output'], is_eval=True if params['mode'] is 'eval' else False
     )
     data_in, data_out = data_gen_test.get_data_sizes()
-    dump_figures = False
-    checkpoint_name = "models/1_1_foa_dev_split1_model.h5"
+    dump_figures = True
+    checkpoint_name = "models/6_4352803_foa_dev_split1_model.h5"
     model = doanet_model.CRNN(data_in, data_out, params)
     model.eval()
     model.load_state_dict(torch.load(checkpoint_name, map_location=torch.device('cpu')))
-
+    model = model.to(device)
     if dump_figures:
         dump_folder = os.path.join('dump_dir', os.path.basename(checkpoint_name).split('.')[0])
         os.makedirs(dump_folder, exist_ok=True)
@@ -42,12 +43,12 @@ def main(argv):
         for data, target in data_gen_test.generate():
             data = torch.tensor(data).to(device).float()
             output, activity = model(data)
-            output = output.detach().numpy()
+            output = output.cpu().detach().numpy()
             use_activity_detector = True
             if use_activity_detector:
-                activity = (torch.sigmoid(activity).detach().numpy() >0.5)
-            mel_spec = data[0][0]
-            foa_iv = data[0][-1]
+                activity = (torch.sigmoid(activity).cpu().detach().numpy() >0.5)
+            mel_spec = data[0][0].cpu()
+            foa_iv = data[0][-1].cpu()
             target[target > 1] =0
 
             plot.figure(figsize=(20,10))
@@ -82,11 +83,11 @@ def main(argv):
             plot.ylim([-1.1, 1.1]), plot.legend()
 
             if dump_figures:
-                fig_name = '{}'.format(os.path.join(dump_folder, '{}.jpg'.format(file_cnt)))
+                fig_name = '{}'.format(os.path.join(dump_folder, '{}.png'.format(file_cnt)))
                 print('saving figure : {}'.format(fig_name))
                 plot.savefig(fig_name, dpi=100)
                 plot.close()
-                if file_cnt>20:
+                if file_cnt>4:
                     break
                 file_cnt += 1
 
