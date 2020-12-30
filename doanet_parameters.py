@@ -11,12 +11,12 @@ def get_params(argv='1'):
         quick_test=False,     # To do quick test. Trains/test on small subset of dataset, and # of epochs
 
         # INPUT PATH
-        # dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
-        dataset_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/',
+        dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
+        # dataset_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/',
 
         # OUTPUT PATH
-        # feat_label_dir='DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
-        feat_label_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
+        feat_label_dir='DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
+        # feat_label_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
 
         model_dir='models/',   # Dumps the trained models and training curves in this folder
         dcase_output=True,     # If true, dumps the results recording-wise in 'dcase_dir' path.
@@ -35,7 +35,7 @@ def get_params(argv='1'):
         nb_mel_bins=64,
 
         # DNN MODEL PARAMETERS
-        use_hnet=True,
+        use_hnet=False,
         label_sequence_length=50,    # Feature sequence length
         batch_size=64,              # Batch size
         dropout_rate=0.15,             # Dropout rate, constant for all layers
@@ -57,7 +57,6 @@ def get_params(argv='1'):
         IDS_wt = 1,
         branch_weights=[10, 1],
         use_dmot_only=False,
-        shuffle_regressors=False
     )
 
     # ########### User defined parameters ##############
@@ -66,20 +65,10 @@ def get_params(argv='1'):
 
     elif argv == '50':
         params['use_dmotp_only']= True
-        params['shuffle_regressors']=True
 
     elif argv == '51':
-        params['use_dmotp_only']= True
-        params['shuffle_regressors']=False
-
-    elif argv == '52':
         params['use_dmotp_only']= False
-        params['shuffle_regressors']=True
 
-    elif argv == '53':
-        params['use_dmotp_only']= False
-        params['shuffle_regressors']= False
-    
     elif argv == '54':
         params['batch_size']= 256
         params['label_sequence_length']= 60

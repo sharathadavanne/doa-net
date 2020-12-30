@@ -127,6 +127,8 @@ class ConvBlock(torch.nn.Module):
 class CRNN(torch.nn.Module):
     def __init__(self, in_feat_shape, out_shape, params):
         super().__init__()
+        self.use_hnet = params['use_hnet']
+        self.use_activity_out = not params['use_dmot_only']
         self.conv_block_list = torch.nn.ModuleList()
         if len(params['f_pool_size']):
             for conv_cnt in range(len(params['f_pool_size'])):
@@ -162,17 +164,18 @@ class CRNN(torch.nn.Module):
         self.fnn_list.append(
             torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], out_shape[-1], bias=True)
         )
-       
+
         # Branch for activity detection 
         self.fnn_act_list = torch.nn.ModuleList()
+        if self.use_hnet and self.use_activity_out:
+            self.fnn_act_list.append(
+                torch.nn.Linear(params['rnn_size'] , params['fnn_size'], bias=True)
+            )
 
-        self.fnn_act_list.append(
-            torch.nn.Linear(params['rnn_size'] , params['fnn_size'], bias=True)
-        )
-        
-        self.fnn_act_list.append(
-            torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
-        )
+            self.fnn_act_list.append(
+                torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
+            )
+
     def forward(self, x):
         '''input: (batch_size, mic_channels, time_steps, mel_bins)'''
 
@@ -196,8 +199,12 @@ class CRNN(torch.nn.Module):
         for fnn_cnt in range(len(self.fnn_list)-1):
             x = torch.relu_(self.fnn_list[fnn_cnt](x))
         doa = torch.tanh(self.fnn_list[-1](x))
-        
-        activity = torch.relu_(self.fnn_act_list[0](x_rnn))
-        activity = self.fnn_act_list[1](activity)
         '''(batch_size, time_steps, label_dim)'''
-        return doa, activity
+
+        if self.use_hnet and self.use_activity_out:
+            activity = torch.relu_(self.fnn_act_list[0](x_rnn))
+            activity = self.fnn_act_list[1](activity)
+
+            return doa, activity
+        else:
+            return doa

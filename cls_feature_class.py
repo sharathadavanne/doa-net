@@ -60,6 +60,8 @@ class FeatureClass:
         self._eps = 1e-8
         self._nb_channels = 4
 
+        self._use_hnet = params['use_hnet']
+
         # Sound event classes dictionary
         self._nb_unique_classes = params['unique_classes']
         self._audio_max_len_samples = params['max_audio_len_s'] * self._fs  # TODO: Fix the audio synthesis code to always generate 60s of
@@ -105,7 +107,7 @@ class FeatureClass:
         mel_feat = mel_feat.reshape((linear_spectra.shape[0], self._nb_mel_bins * linear_spectra.shape[-1]))
         return mel_feat
 
-    def _get_foa_intensity_vectors2(self, linear_spectra):
+    def _get_foa_intensity_vectors(self, linear_spectra):
         W = linear_spectra[:, :, 0]
         I = np.real(np.conj(W)[:, :, np.newaxis] * linear_spectra[:, :, 1:])
         E = self._eps + (np.abs(W)**2 + ((np.abs(linear_spectra[:, :, 1:])**2).sum(-1))/3.0 )
@@ -113,24 +115,6 @@ class FeatureClass:
         I_norm = I/E[:, :, np.newaxis]
         I_norm_mel = np.transpose(np.dot(np.transpose(I_norm, (0,2,1)), self._mel_wts), (0,2,1))
         foa_iv = I_norm_mel.reshape((linear_spectra.shape[0], self._nb_mel_bins * 3))
-        if np.isnan(foa_iv).any():
-            print('Feature extraction is generating nan outputs')
-            exit()
-        return foa_iv
-
-    def _get_foa_intensity_vectors(self, linear_spectra):
-        IVx = np.real(np.conj(linear_spectra[:, :, 0]) * linear_spectra[:, :, 1])
-        IVy = np.real(np.conj(linear_spectra[:, :, 0]) * linear_spectra[:, :, 2])
-        IVz = np.real(np.conj(linear_spectra[:, :, 0]) * linear_spectra[:, :, 3])
-
-        normal = np.sqrt(IVx**2 + IVy**2 + IVz**2) + self._eps
-        IVx = np.dot(IVx / normal, self._mel_wts)
-        IVy = np.dot(IVy / normal, self._mel_wts)
-        IVz = np.dot(IVz / normal, self._mel_wts)
-
-        # we are doing the following instead of simply concatenating to keep the processing similar to mel_spec and gcc
-        foa_iv = np.dstack((IVx, IVy, IVz))
-        foa_iv = foa_iv.reshape((linear_spectra.shape[0], self._nb_mel_bins * 3))
         if np.isnan(foa_iv).any():
             print('Feature extraction is generating nan outputs')
             exit()
@@ -162,16 +146,23 @@ class FeatureClass:
         :param _desc_file: metadata description file
         :return: label_mat: of dimension [nb_frames, 3*max_classes], max_classes each for x, y, z axis,
         """
-        
-        x_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
-        y_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
-        z_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
 
-        nb_classes = np.zeros((self._max_label_frames, 1))
+        # If using Hungarian net set default DOA value to a fixed value greater than 1 for all axis. We are choosing a fixed value of 10
+        # If not using Hungarian net use a deafult DOA, which is a unit vector. We are choosing (x, y, z) = (0, 0, 1)
+        if self._use_hnet:
+            x_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
+            y_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
+            z_label = 10*np.ones((self._max_label_frames, self._nb_unique_classes))
+        else:
+            x_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
+            y_label = np.zeros((self._max_label_frames, self._nb_unique_classes))
+            z_label = np.ones((self._max_label_frames, self._nb_unique_classes))
+
+        nb_classes = np.zeros((self._max_label_frames, self._nb_unique_classes))
         for frame_ind, active_event_list in _desc_file.items():
             if frame_ind < self._max_label_frames:
-                nb_classes[frame_ind] = len(active_event_list)
                 for active_event in range(len(active_event_list)):
+                    nb_classes[frame_ind, active_event] = 1
                     x_label[frame_ind, active_event] = active_event_list[active_event][1]
                     y_label[frame_ind, active_event] = active_event_list[active_event][2]
                     z_label[frame_ind, active_event] = active_event_list[active_event][3]
@@ -200,7 +191,7 @@ class FeatureClass:
             feat = None
             if self._dataset is 'foa':
                 # extract intensity vectors
-                foa_iv = self._get_foa_intensity_vectors2(spect)
+                foa_iv = self._get_foa_intensity_vectors(spect)
                 feat = np.concatenate((mel_spect, foa_iv), axis=-1)
             elif self._dataset is 'mic':
                 # extract gcc
