@@ -124,7 +124,7 @@ def main(argv):
             params['fnn_size']))
 
         model = doanet_model.CRNN(data_in, data_out, params).to(device)
-#        model.load_state_dict(torch.load("models/1_4415973_foa_dev_split1_model.h5", map_location='cpu'))
+#        model.load_state_dict(torch.load("models/1_1_foa_dev_split1_model.h5", map_location='cpu'))
         print('---------------- DOA-net -------------------')
         print(model)
         best_val_loss = 99999

@@ -52,10 +52,10 @@ def get_params(argv='1'):
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
         nb_epochs=250,               # Train for maximum epochs
         lr=1e-3,
-        branch_weights=[1, 1],
+        dMOTA_wt = 10,
         dMOTP_wt = 1,
-        dMOTA_wt = 1,
         IDS_wt = 1,
+        branch_weights=[10, 1],
         use_dmot_only=False,
         shuffle_regressors=False
     )

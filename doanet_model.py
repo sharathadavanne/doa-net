@@ -195,7 +195,7 @@ class CRNN(torch.nn.Module):
         x_rnn = x
         for fnn_cnt in range(len(self.fnn_list)-1):
             x = torch.relu_(self.fnn_list[fnn_cnt](x))
-        doa = self.fnn_list[-1](x)
+        doa = torch.tanh(self.fnn_list[-1](x))
         
         activity = torch.relu_(self.fnn_act_list[0](x_rnn))
         activity = self.fnn_act_list[1](activity)

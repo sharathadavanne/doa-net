@@ -29,7 +29,7 @@ def main(argv):
     )
     data_in, data_out = data_gen_test.get_data_sizes()
     dump_figures = True
-    checkpoint_name = "models/1_4415973_foa_dev_split1_model.h5"
+    checkpoint_name = "models/1_4422550_foa_dev_split1_model.h5"
     model = doanet_model.CRNN(data_in, data_out, params)
     model.eval()
     model.load_state_dict(torch.load(checkpoint_name, map_location=torch.device('cpu')))
