@@ -39,8 +39,6 @@ class doa_metric:
                 self._total_gt += nb_active_gt
                 if nb_active_gt and nb_active_pred:
                     loc_dist = loc_dist[pred_activity[frame_cnt]==1, :][:, gt_activity[frame_cnt]==1]
-                    if len(loc_dist.shape)==1:
-                        loc_dist = loc_dist[np.newaxis]
                     row_ind, col_ind = linear_sum_assignment(loc_dist)
                     loc_err = loc_dist[row_ind, col_ind].sum()
 
@@ -51,7 +49,9 @@ class doa_metric:
         if self._is_baseline:
             return self._localization_error/self._total_gt
         else:
-            return self._localization_error/self._total_gt, self._tp_doa/self._total_gt, self._tp_doa/self._total_pred
+            localization_error = self._localization_error/self._tp_doa
+            localization_recall = self._tp_doa/self._total_gt
+            return localization_error, localization_recall
 
 
 

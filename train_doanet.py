@@ -79,12 +79,10 @@ def test_epoch(data_generator, model, hnet_model, activity_loss, criterion, metr
             if params['use_hnet']:
                 # get pair-wise distance matrix between predicted and reference.
                 dist_mat = torch.cdist(output.contiguous(), target.contiguous())
-                with torch.no_grad():
-                    hidden = torch.zeros(1, dist_mat.shape[0], 128).to(device)
-                    da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
-                    da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
-                    da_mat = da_mat.view(dist_mat.shape)
-                    da_mat = (da_mat>0.5).float().detach()
+                da_mat, _, _ = hnet_model(dist_mat)
+                da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
+                da_mat = da_mat.view(dist_mat.shape)
+                da_mat = (da_mat>0.5)*da_mat
 
                 # Compute dMOTP loss for true positives
                 dMOTP_loss = (torch.mul(dist_mat, da_mat).sum(-1).sum(-1) * da_mat.sum(-1).sum(-1)*params['dMOTP_wt']).sum()/da_mat.sum()
@@ -114,7 +112,7 @@ def test_epoch(data_generator, model, hnet_model, activity_loss, criterion, metr
             dist_mat_hung = torch.clamp(dist_mat_hung, -1+eps, 1-eps) # the +- eps is critical because the acos computation will become saturated if we have values of -1 and 1
             dist_mat_hung = torch.acos(dist_mat_hung)  # (batch, sequence, max_nb_doas, max_nb_doas)
             dist_mat_hung = dist_mat_hung.cpu().detach().numpy()
-
+            
             metric_cls.partial_compute_metric(dist_mat_hung, target_activity, pred_activity=activity_binary)
 
             train_loss += loss.item()
@@ -135,7 +133,6 @@ def train_epoch(data_generator, optimizer, model, hnet_model, activity_loss, cri
     nb_train_batches, train_loss, train_dMOTP_loss, train_dMOTA_loss, train_act_loss = 0, 0., 0., 0., 0.
     model.train()
     for data, target in data_generator.generate():
-        optimizer.zero_grad()
 
         # load one batch of data
         target_activity = target[:, :, -params['unique_classes']:].reshape(-1, params['unique_classes'])
@@ -143,14 +140,13 @@ def train_epoch(data_generator, optimizer, model, hnet_model, activity_loss, cri
         data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:, :, :-params['unique_classes']]).to(device).float()
 
         # process the batch of data based on chosen mode
-        activity_binary = None
+        optimizer.zero_grad()
         if params['use_hnet']:
             if params['use_dmot_only']:
                 output = model(data)
             else:
                 output, activity_out = model(data)
                 activity_out = activity_out.view(-1, activity_out.shape[-1])
-                activity_binary = (torch.sigmoid(activity_out).cpu().detach().numpy() > 0.5)
         else:
             output = model(data)
 
@@ -168,12 +164,10 @@ def train_epoch(data_generator, optimizer, model, hnet_model, activity_loss, cri
         if params['use_hnet']:
             # get pair-wise distance matrix between predicted and reference.
             dist_mat = torch.cdist(output.contiguous(), target.contiguous())
-            with torch.no_grad():
-                hidden = torch.zeros(1, dist_mat.shape[0], 128).to(device)
-                da_mat, _, _ = hnet_model(dist_mat.transpose(1, 2), hidden)
-                da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
-                da_mat = da_mat.view(dist_mat.shape)
-                da_mat = (da_mat>0.5).float().detach()
+            da_mat, _, _ = hnet_model(dist_mat)
+            da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
+            da_mat = da_mat.view(dist_mat.shape)
+            da_mat = (da_mat>0.5)*da_mat
 
             # Compute dMOTP loss for true positives
             dMOTP_loss = (torch.mul(dist_mat, da_mat).sum(-1).sum(-1) * da_mat.sum(-1).sum(-1)*params['dMOTP_wt']).sum()/da_mat.sum()
@@ -248,10 +242,11 @@ def main(argv):
 
     job_id = 1 if len(argv) < 3 else argv[-1]
 
-    # load Hungarian network for data association.
+    # load Hungarian network for data association, and freeze all layers.
     hnet_model = HNetGRU(max_len=2).to(device)
-    hnet_model.eval()
     hnet_model.load_state_dict(torch.load("models/hnet_model.pt", map_location=torch.device('cpu')))
+    for model_params in hnet_model.parameters():
+        model_params.requires_grad = False
     print('---------------- Hungarian-net -------------------')
     print(hnet_model)
 
@@ -296,16 +291,14 @@ def main(argv):
             params['fnn_size']))
 
         model = doanet_model.CRNN(data_in, data_out, params).to(device)
-        # model.load_state_dict(torch.load("models/1_4415973_foa_dev_split1_model.h5", map_location='cpu'))
+#        model.load_state_dict(torch.load("models/1_4415973_foa_dev_split1_model.h5", map_location='cpu'))
         print('---------------- DOA-net -------------------')
         print(model)
         best_val_loss = 99999
         best_val_epoch = -1
-        best_hung_loss = 99999
-        best_hung_epoch = -1
         patience_cnt = 0
 
-        nb_epoch = 2 if params['quick_test'] else params['nb_epochs']
+        nb_epoch = 200 if params['quick_test'] else params['nb_epochs']
         tr_loss_list = np.zeros(nb_epoch)
         val_loss_list = np.zeros(nb_epoch)
         hung_tr_loss_list = np.zeros(nb_epoch)
@@ -314,6 +307,7 @@ def main(argv):
         optimizer = optim.Adam(model.parameters(), lr=params['lr'])
         criterion = torch.nn.MSELoss()
         activity_loss = nn.BCEWithLogitsLoss()
+
         # start training
         for epoch_cnt in range(nb_epoch):
             # ---------------------------------------------------------------------
@@ -330,7 +324,7 @@ def main(argv):
             val_metric, val_loss, val_dMOTP_loss, val_dMOTA_loss, val_act_loss = test_epoch(data_gen_val, model, hnet_model, activity_loss, criterion, val_metric, params, device)
 
             if params['use_hnet'] and not params['use_dmot_only']:
-                val_hung_loss, val_recall_doa, val_precision_doa = val_metric.get_results()
+                val_hung_loss, val_recall_doa = val_metric.get_results()
             else:
                 val_hung_loss = val_metric.get_results()
             val_time = time.time() - start_time
@@ -350,7 +344,7 @@ def main(argv):
                     epoch_cnt, train_time, val_time,
                     train_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(train_dMOTP_loss, train_dMOTA_loss, train_act_loss) if params['use_hnet'] else '',
                     val_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(val_dMOTP_loss, val_dMOTA_loss, val_act_loss) if params['use_hnet'] else '',
-                    180*val_hung_loss/np.pi, '/{:0.2f}/{:0.2f}'.format(val_precision_doa*100.0, val_recall_doa*100.0) if params['use_hnet']  and not params['use_dmot_only']else '',
+                    180*val_hung_loss/np.pi, '/{:0.2f}'.format(val_recall_doa*100.0) if params['use_hnet']  and not params['use_dmot_only']else '',
                     best_val_epoch)
             )
 
@@ -376,14 +370,14 @@ def main(argv):
         test_metric, test_loss, test_dMOTP_loss, test_dMOTA_loss, test_act_loss = test_epoch(data_gen_test, model, hnet_model, activity_loss, criterion, test_metric, params, device)
 
         if params['use_hnet'] and not params['use_dmot_only']:
-            test_hung_loss, test_recall_doa, test_precision_doa = test_metric.get_results()
+            test_hung_loss, test_recall_doa = test_metric.get_results()
         else:
             test_hung_loss = test_metric.get_results()
 
         print(
             'test_loss: {:0.2f} {}, test_hung_loss_deg: {:0.3f}{}'.format(
                 test_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(test_dMOTP_loss, test_dMOTA_loss, test_act_loss) if params['use_hnet'] else '',
-                180*test_hung_loss/np.pi, '/{:0.2f}/{:0.2f}'.format(test_precision_doa*100.0, test_recall_doa*100.0) if params['use_hnet'] and not params['use_dmot_only'] else '')
+                180*test_hung_loss/np.pi, '/{:0.2f}'.format(test_recall_doa*100.0) if params['use_hnet'] and not params['use_dmot_only'] else '')
         )
 
 

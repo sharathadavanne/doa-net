@@ -38,7 +38,7 @@ def get_params(argv='1'):
         use_hnet=True,
         label_sequence_length=50,    # Feature sequence length
         batch_size=64,              # Batch size
-        dropout_rate=0.15,             # Dropout rate, constant for all layers
+        dropout_rate=0.,             # Dropout rate, constant for all layers
         nb_cnn2d_filt=128,           # Number of CNN nodes, constant for each layer
         f_pool_size=[2, 2, 2],      # CNN frequency pooling, length of list = number of CNN layers, list value = pooling per layer
 
@@ -50,12 +50,12 @@ def get_params(argv='1'):
 
         nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
-        nb_epochs=250,               # Train for maximum epochs
+        nb_epochs=100,               # Train for maximum epochs
         lr=1e-3,
-        dMOTA_wt = 10,
+        dMOTA_wt = 1,
         dMOTP_wt = 1,
         IDS_wt = 1,
-        branch_weights=[10, 1],
+        branch_weights=[1, 1],
         use_dmot_only=False,
     )
 
@@ -97,15 +97,6 @@ def get_params(argv='1'):
         params['batch_size']= 128
         params['label_sequence_length']= 10
 
-    elif argv == '61':
-        params['lr']= 1e-2
-
-    elif argv == '62':
-        params['lr']= 1e-4
-    
-    elif argv == '63':
-        params['lr']= 1e-5
-    
 
     elif argv == '64':
         params['batch_size']= 64
@@ -122,25 +113,6 @@ def get_params(argv='1'):
     elif argv == '67':
         params['batch_size']= 64
         params['label_sequence_length']= 60
-
-    elif argv == '68':
-        params['lr']= 1e-2
-        params['dropout_rate'] = 0.5
-
-    elif argv == '69':
-        params['lr']= 1e-3
-        params['dropout_rate'] = 0.5
-
-    elif argv == '70':
-        params['lr']= 1e-4
-        params['dropout_rate'] = 0.5
-    
-    elif argv == '71':
-        params['lr']= 1e-5
-        params['dropout_rate'] = 0.5
-    
-    elif argv == '72':
-       params['nb_fnn_layers']=2
 
     elif argv == '73':
         params['nb_cnn2d_filt'] = 256
@@ -173,11 +145,6 @@ def get_params(argv='1'):
         params['rnn_size'] = 512
         params['f_pool_size'] = [1, 1, 1]
 
-    elif argv =='79':
-        params['use_hnet']=False
-
-    elif argv =='80':
-        params['binary_da']=True
 
     elif argv =='81':
         params['self_attn'] = True
@@ -241,10 +208,10 @@ def get_params(argv='1'):
         params['dropout_rate'] = 0.5
 
     elif argv == '85':
-        params['dMOTA_wt'] = 1
+        params['dMOTA_wt'] = 10
 
     elif argv == '86':
-        params['dMOTA_wt'] = 10
+        params['dMOTA_wt'] = 50
 
     elif argv == '87':
         params['dMOTA_wt'] = 100
@@ -253,25 +220,25 @@ def get_params(argv='1'):
         params['branch_weights'] = [10, 1]
 
     elif argv == '89':
-        params['branch_weights'] = [100, 1]
+        params['branch_weights'] = [50, 1]
 
     elif argv == '90':
-        params['branch_weights'] = [1000, 1]
+        params['branch_weights'] = [100, 1]
 
     elif argv == '91':
-        params['IDS_wt'] = 1
+        params['IDS_wt'] = 10
 
     elif argv == '92':
-        params['IDS_wt'] = 10
+        params['IDS_wt'] = 50
 
     elif argv == '93':
         params['IDS_wt'] = 100
 
     elif argv == '94':
-        params['dMOTP_wt'] = 1
+        params['dMOTP_wt'] = 10
 
     elif argv == '95':
-        params['dMOTP_wt'] = 10
+        params['dMOTP_wt'] = 50
 
     elif argv == '96':
         params['dMOTP_wt'] = 100

@@ -195,6 +195,7 @@ class CRNN(torch.nn.Module):
             x = self.attn.forward(x, x, x)
             # out - batch x hidden x seq
             x = torch.tanh(x)
+
         x_rnn = x
         for fnn_cnt in range(len(self.fnn_list)-1):
             x = torch.relu_(self.fnn_list[fnn_cnt](x))
