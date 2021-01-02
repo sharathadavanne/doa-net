@@ -41,8 +41,7 @@ def main(argv):
     with torch.no_grad():
         file_cnt = 0
         for data, target in data_gen_test.generate():
-
-            data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:,:,:-1]).to(device).float()
+            data, target = torch.tensor(data).to(device).float(), torch.tensor(target[:,:,:-params['unique_classes']]).to(device).float()
             output, activity_out = model(data)
 
             # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)

@@ -83,13 +83,14 @@ def test_epoch(data_generator, model, hnet_model, activity_loss, criterion, metr
                 da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
                 da_mat = da_mat.view(dist_mat.shape)
                 da_mat = (da_mat>0.5)*da_mat
+                da_activity = da_mat.max(-1)[0]
 
                 # Compute dMOTP loss for true positives
                 dMOTP_loss = (torch.mul(dist_mat, da_mat).sum(-1).sum(-1) * da_mat.sum(-1).sum(-1)*params['dMOTP_wt']).sum()/da_mat.sum()
                 # dMOTP_loss = torch.mul(dist_mat, da_mat).sum()/ da_mat.sum()
 
                 # Compute dMOTA loss
-                M = da_mat.max(-1)[0].sum(-1)
+                M = da_activity.sum(-1)
                 N = torch.Tensor(nb_framewise_doas_gt).to(device)
                 FP = torch.clamp(M-N, min=0)
                 FN = torch.clamp(N-M, min=0)
@@ -101,7 +102,7 @@ def test_epoch(data_generator, model, hnet_model, activity_loss, criterion, metr
                 train_dMOTA_loss += dMOTA_loss.item()
                 loss = dMOTP_loss+params['dMOTA_wt']*dMOTA_loss
                 if not params['use_dmot_only']:
-                    act_loss = activity_loss(activity_out, da_mat.max(-1)[0])
+                    act_loss = activity_loss(activity_out, (da_activity>0.5).float())
                     loss = params['branch_weights'][0] * loss + params['branch_weights'][1] * act_loss
                     train_act_loss += act_loss.item()
             else:
@@ -147,6 +148,7 @@ def train_epoch(data_generator, optimizer, model, hnet_model, activity_loss, cri
             else:
                 output, activity_out = model(data)
                 activity_out = activity_out.view(-1, activity_out.shape[-1])
+#                activity_binary = (torch.sigmoid(activity_out).cpu().detach().numpy() > 0.5)
         else:
             output = model(data)
 
@@ -168,32 +170,33 @@ def train_epoch(data_generator, optimizer, model, hnet_model, activity_loss, cri
             da_mat = da_mat.sigmoid()  # (batch*sequence, max_nb_doas, max_nb_doas)
             da_mat = da_mat.view(dist_mat.shape)
             da_mat = (da_mat>0.5)*da_mat
+            da_activity = da_mat.max(-1)[0]
 
             # Compute dMOTP loss for true positives
             dMOTP_loss = (torch.mul(dist_mat, da_mat).sum(-1).sum(-1) * da_mat.sum(-1).sum(-1)*params['dMOTP_wt']).sum()/da_mat.sum()
             # dMOTP_loss = torch.mul(dist_mat, da_mat).sum()/ da_mat.sum()
-
+            
             # Compute dMOTA loss
-            M = da_mat.max(-1)[0].sum(-1)
+            M = da_activity.sum(-1)
             N = torch.Tensor(nb_framewise_doas_gt).to(device)
             FP = torch.clamp(M-N, min=0)
             FN = torch.clamp(N-M, min=0)
             IDS = (da_mat[1:]*(1-da_mat[:-1])).sum(-1).sum(-1)
             IDS = torch.cat((torch.Tensor([0]).to(device), IDS))
             dMOTA_loss = ((FP + FN + params['IDS_wt']* IDS).sum() / (M+ torch.finfo(torch.float32).eps).sum())
-
+            
             train_dMOTP_loss += dMOTP_loss.item()
             train_dMOTA_loss += dMOTA_loss.item()
             loss = dMOTP_loss+params['dMOTA_wt']*dMOTA_loss
             if not params['use_dmot_only']:
-                act_loss = activity_loss(activity_out, da_mat.max(-1)[0])
+                act_loss = activity_loss(activity_out, (da_activity>0.5).float())
                 loss = params['branch_weights'][0] * loss + params['branch_weights'][1] * act_loss
                 train_act_loss += act_loss.item()
         else:
             loss = criterion(output, target)
         loss.backward()
         optimizer.step()
-
+        
         train_loss += loss.item()
         nb_train_batches += 1
         if params['quick_test'] and nb_train_batches == 4:
@@ -282,23 +285,24 @@ def main(argv):
             params=params, split=val_splits[split_cnt], shuffle=False
         )
 
-        # Collect the reference labels for validation data
+        # Collect i/o data size and load model configuration
         data_in, data_out = data_gen_train.get_data_sizes()
-        print('FEATURES:\n\tdata_in: {}\n\tdata_out: {}\n'.format(data_in, data_out))
+        model = doanet_model.CRNN(data_in, data_out, params).to(device)
+#        model.load_state_dict(torch.load("models/95_4441371_foa_dev_split1_model.h5", map_location='cpu'))
 
+        print('---------------- DOA-net -------------------')
+        print('FEATURES:\n\tdata_in: {}\n\tdata_out: {}\n'.format(data_in, data_out))
         print('MODEL:\n\tdropout_rate: {}\n\tCNN: nb_cnn_filt: {}, f_pool_size{}, t_pool_size{}\n\trnn_size: {}, fnn_size: {}\n'.format(
             params['dropout_rate'], params['nb_cnn2d_filt'], params['f_pool_size'], params['t_pool_size'], params['rnn_size'],
             params['fnn_size']))
-
-        model = doanet_model.CRNN(data_in, data_out, params).to(device)
-#        model.load_state_dict(torch.load("models/1_4415973_foa_dev_split1_model.h5", map_location='cpu'))
-        print('---------------- DOA-net -------------------')
         print(model)
-        best_val_loss = 99999
+
+        # start training
         best_val_epoch = -1
+        best_doa, best_recall = 180, 0
         patience_cnt = 0
 
-        nb_epoch = 200 if params['quick_test'] else params['nb_epochs']
+        nb_epoch = 2 if params['quick_test'] else params['nb_epochs']
         tr_loss_list = np.zeros(nb_epoch)
         val_loss_list = np.zeros(nb_epoch)
         hung_tr_loss_list = np.zeros(nb_epoch)
@@ -308,7 +312,6 @@ def main(argv):
         criterion = torch.nn.MSELoss()
         activity_loss = nn.BCEWithLogitsLoss()
 
-        # start training
         for epoch_cnt in range(nb_epoch):
             # ---------------------------------------------------------------------
             # TRAINING
@@ -327,25 +330,25 @@ def main(argv):
                 val_hung_loss, val_recall_doa = val_metric.get_results()
             else:
                 val_hung_loss = val_metric.get_results()
+                val_recall_doa = 100.
             val_time = time.time() - start_time
 
             # Save model if loss is good
-            if val_hung_loss < best_val_loss:
-                best_val_loss = val_hung_loss
-                best_val_epoch = epoch_cnt
+            if val_hung_loss  < best_doa:
+                best_doa, best_val_epoch, best_recall = val_hung_loss, epoch_cnt, val_recall_doa
                 torch.save(model.state_dict(), model_name)
 
             # Print stats and plot scores
             print(
                 'epoch: {}, time: {:0.2f}/{:0.2f}, '
                 'train_loss: {:0.2f} {}, val_loss: {:0.2f} {}, '
-                'val_hung_loss_deg: {:0.3f}{}, '
-                'best_val_epoch: {}'.format(
+                'LE/LR: {:0.3f}/{}, '
+                'best_val_epoch: {} {}'.format(
                     epoch_cnt, train_time, val_time,
                     train_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(train_dMOTP_loss, train_dMOTA_loss, train_act_loss) if params['use_hnet'] else '',
                     val_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(val_dMOTP_loss, val_dMOTA_loss, val_act_loss) if params['use_hnet'] else '',
-                    180*val_hung_loss/np.pi, '/{:0.2f}'.format(val_recall_doa*100.0) if params['use_hnet']  and not params['use_dmot_only']else '',
-                    best_val_epoch)
+                    val_hung_loss, '{:0.2f}'.format(val_recall_doa) if params['use_hnet']  and not params['use_dmot_only']else '100.0',
+                    best_val_epoch, '({:0.2f}, {:0.2f})'.format(best_doa, best_recall) if params['use_hnet']  and not params['use_dmot_only']else '({:0.2f})'.format(best_doa))
             )
 
             tr_loss_list[epoch_cnt], val_loss_list[epoch_cnt], hung_val_loss_list[epoch_cnt] = train_loss, val_loss, val_hung_loss
@@ -375,9 +378,9 @@ def main(argv):
             test_hung_loss = test_metric.get_results()
 
         print(
-            'test_loss: {:0.2f} {}, test_hung_loss_deg: {:0.3f}{}'.format(
+            'test_loss: {:0.2f} {}, LE/LR: {:0.3f}/{}'.format(
                 test_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(test_dMOTP_loss, test_dMOTA_loss, test_act_loss) if params['use_hnet'] else '',
-                180*test_hung_loss/np.pi, '/{:0.2f}'.format(test_recall_doa*100.0) if params['use_hnet'] and not params['use_dmot_only'] else '')
+                test_hung_loss, '{:0.2f}'.format(test_recall_doa) if params['use_hnet'] and not params['use_dmot_only'] else '100.0')
         )
 
 

@@ -168,13 +168,14 @@ class CRNN(torch.nn.Module):
         # Branch for activity detection 
         self.fnn_act_list = torch.nn.ModuleList()
         if self.use_hnet and self.use_activity_out:
+            for fc_cnt in range(params['nb_fnn_act_layers']):
+                self.fnn_act_list.append(
+                    torch.nn.Linear(params['fnn_act_size'] if fc_cnt else params['rnn_size'] , params['fnn_act_size'], bias=True)
+                )
             self.fnn_act_list.append(
-                torch.nn.Linear(params['rnn_size'] , params['fnn_size'], bias=True)
+                torch.nn.Linear(params['fnn_act_size'] if params['nb_fnn_act_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
             )
 
-            self.fnn_act_list.append(
-                torch.nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else params['rnn_size'], params['unique_classes'], bias=True)
-            )
 
     def forward(self, x):
         '''input: (batch_size, mic_channels, time_steps, mel_bins)'''
@@ -203,8 +204,9 @@ class CRNN(torch.nn.Module):
         '''(batch_size, time_steps, label_dim)'''
 
         if self.use_hnet and self.use_activity_out:
-            activity = torch.relu_(self.fnn_act_list[0](x_rnn))
-            activity = self.fnn_act_list[1](activity)
+            for fnn_cnt in range(len(self.fnn_act_list)-1):
+                x_rnn = torch.relu_(self.fnn_act_list[fnn_cnt](x_rnn))
+            activity = torch.tanh(self.fnn_act_list[-1](x_rnn))
 
             return doa, activity
         else:

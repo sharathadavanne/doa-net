@@ -25,7 +25,7 @@ def get_params(argv='1'):
 
         # DATASET LOADING PARAMETERS
         mode='dev',         # 'dev' - development or 'eval' - evaluation dataset
-        dataset='foa',       # 'foa' - ambisonic or 'mic' - microphone signals
+        dataset='mic',       # 'foa' - ambisonic or 'mic' - microphone signals
 
         #FEATURE PARAMS
         fs=24000,
@@ -50,12 +50,16 @@ def get_params(argv='1'):
 
         nb_fnn_layers=2,
         fnn_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
-        nb_epochs=100,               # Train for maximum epochs
+
+        nb_fnn_act_layers=2,
+        fnn_act_size=128,             # FNN contents, length of list = number of layers, list value = number of nodes
+
+        nb_epochs=200,              # Train for maximum epochs
         lr=1e-3,
         dMOTA_wt = 1,
-        dMOTP_wt = 1,
+        dMOTP_wt = 50,
         IDS_wt = 1,
-        branch_weights=[1, 1],
+        branch_weights=[1, 10.],
         use_dmot_only=False,
     )
 
@@ -64,14 +68,28 @@ def get_params(argv='1'):
         print("USING DEFAULT PARAMETERS\n")
 
     elif argv == '50':
-        params['use_dmotp_only']= True
+        params['use_hnet']= True
+        params['use_dmot_only']= True
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/'
 
     elif argv == '51':
-        params['use_dmotp_only']= False
+        params['use_hnet']= True
+        params['use_dmot_only']= False
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/'
+
+    elif argv == '52':
+        params['use_hnet']= False
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_baseline/'
+
+    elif argv == '53':
+        params['use_hnet']= True
+        params['use_dmot_only']= True
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
 
     elif argv == '54':
-        params['batch_size']= 256
-        params['label_sequence_length']= 60
+        params['use_hnet']= True
+        params['use_dmot_only']= False
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
 
     elif argv == '55':
         params['batch_size']= 128
@@ -242,6 +260,15 @@ def get_params(argv='1'):
 
     elif argv == '96':
         params['dMOTP_wt'] = 100
+
+    elif argv == '97':
+        params['branch_weights'] = [1, 10]
+
+    elif argv == '98':
+        params['branch_weights'] = [1, 50]
+
+    elif argv == '99':
+        params['branch_weights'] = [1, 100]
 
     elif argv == '999':
         print("QUICK TEST MODE\n")

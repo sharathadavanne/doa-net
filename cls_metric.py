@@ -47,11 +47,12 @@ class doa_metric:
 
     def get_results(self):
         if self._is_baseline:
-            return self._localization_error/self._total_gt
+            localization_error = self._localization_error/self._total_gt
+            return 180.*localization_error/np.pi
         else:
             localization_error = self._localization_error/self._tp_doa
             localization_recall = self._tp_doa/self._total_gt
-            return localization_error, localization_recall
+            return 180.*localization_error/np.pi, 100.*localization_recall
 
 
 
