@@ -6,7 +6,7 @@ import os
 import numpy as np
 import scipy.io.wavfile as wav
 from sklearn import preprocessing
-from sklearn.externals import joblib
+import joblib
 from IPython import embed
 import matplotlib.pyplot as plot
 import librosa
@@ -104,7 +104,7 @@ class FeatureClass:
             mel_spectra = np.dot(mag_spectra, self._mel_wts)
             log_mel_spectra = librosa.power_to_db(mel_spectra)
             mel_feat[:, :, ch_cnt] = log_mel_spectra
-        mel_feat = mel_feat.reshape((linear_spectra.shape[0], self._nb_mel_bins * linear_spectra.shape[-1]))
+        mel_feat = mel_feat.transpose((0, 2, 1)).reshape((linear_spectra.shape[0], -1))
         return mel_feat
 
     def _get_foa_intensity_vectors(self, linear_spectra):
@@ -114,7 +114,7 @@ class FeatureClass:
         
         I_norm = I/E[:, :, np.newaxis]
         I_norm_mel = np.transpose(np.dot(np.transpose(I_norm, (0,2,1)), self._mel_wts), (0,2,1))
-        foa_iv = I_norm_mel.reshape((linear_spectra.shape[0], self._nb_mel_bins * 3))
+        foa_iv = I_norm_mel.transpose((0, 2, 1)).reshape((linear_spectra.shape[0], self._nb_mel_bins * 3))
         if np.isnan(foa_iv).any():
             print('Feature extraction is generating nan outputs')
             exit()
@@ -131,7 +131,7 @@ class FeatureClass:
                 cc = np.concatenate((cc[:, -self._nb_mel_bins//2:], cc[:, :self._nb_mel_bins//2]), axis=-1)
                 gcc_feat[:, :, cnt] = cc
                 cnt += 1
-        return gcc_feat.reshape((linear_spectra.shape[0], self._nb_mel_bins*gcc_channels))
+        return gcc_feat.transpose((0, 2, 1)).reshape((linear_spectra.shape[0], -1))
 
     def _get_spectrogram_for_file(self, audio_filename):
         audio_in, fs = self._load_audio(os.path.join(self._aud_dir, audio_filename))

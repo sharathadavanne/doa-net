@@ -178,7 +178,6 @@ class DataGenerator(object):
                     feat[j, :] = self._circ_buf_feat.popleft()
                 for j in range(self._label_batch_seq_len):
                     label[j, :] = self._circ_buf_label.popleft()
-
                 feat = np.reshape(feat, (self._feature_batch_seq_len, self._nb_ch, self._nb_mel_bins))
 
                 # Split to sequences
