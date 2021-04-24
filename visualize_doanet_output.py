@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plot
+plot.rcParams.update({'font.size': 22})
 
 
 def main(argv):
@@ -20,7 +21,10 @@ def main(argv):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
-    params = doanet_parameters.get_params()
+
+    # use parameter set defined by user
+    task_id = '1' if len(argv) < 2 else argv[1]
+    params = doanet_parameters.get_params(task_id)
 
     print('\nLoading the best model and predicting results on the testing split')
     print('\tLoading testing dataset:')
@@ -29,7 +33,7 @@ def main(argv):
     )
     data_in, data_out = data_gen_test.get_data_sizes()
     dump_figures = True
-    checkpoint_name = "models/1_4422550_foa_dev_split1_model.h5"
+    checkpoint_name = "models/21_5622351_foa_dev_split1_model.h5"
     model = doanet_model.CRNN(data_in, data_out, params)
     model.eval()
     model.load_state_dict(torch.load(checkpoint_name, map_location=torch.device('cpu')))
@@ -68,32 +72,32 @@ def main(argv):
             plot.subplot(321), plot.imshow(torch.transpose(mel_spec, -1, -2))
             plot.subplot(322), plot.imshow(torch.transpose(foa_iv, -1, -2))
 
-            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 0], 'r', label='x1r')
-            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 1], 'g', label='y1r')
-            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 2], 'b', label='z1r')
+            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 0], 'r', lw=2)
+            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 1], 'g', lw=2)
+            plot.subplot(323), plot.plot(target[:params['label_sequence_length'], 0, 2], 'b', lw=2)
             plot.grid()
-            plot.ylim([-1.1, 1.1]), plot.legend()
+            plot.ylim([-1.1, 1.1])
 
-            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 0], 'r', label='x2r')
-            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 1], 'g', label='y2r')
-            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 2], 'b', label='z2r')
+            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 0], 'r', lw=2)
+            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 1], 'g', lw=2)
+            plot.subplot(324), plot.plot(target[:params['label_sequence_length'], 1, 2], 'b', lw=2)
             plot.grid()
-            plot.ylim([-1.1, 1.1]), plot.legend()
+            plot.ylim([-1.1, 1.1])
             if use_activity_detector:
                 output[:, 0, 0:3] = activity[:, 0][:, np.newaxis]*output[:, 0, 0:3]
                 output[:, 1, 0:3] = activity[:, 1][:, np.newaxis]*output[:, 1, 0:3]
 
-            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 0], ':r', label='x1p')
-            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 1], ':g', label='y1p')
-            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 2], ':b', label='z1p')
+            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 0], 'r', lw=2)
+            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 1], 'g', lw=2)
+            plot.subplot(325), plot.plot(output[:params['label_sequence_length'], 0, 2], 'b', lw=2)
             plot.grid()
-            plot.ylim([-1.1, 1.1]), plot.legend()
+            plot.ylim([-1.1, 1.1])
 
-            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 0], ':r', label='x2p')
-            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 1], ':g', label='y2p')
-            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 2], ':b', label='z2p')
+            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 0], 'r', lw=2)
+            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 1], 'g', lw=2)
+            plot.subplot(326), plot.plot(output[:params['label_sequence_length'], 1, 2], 'b', lw=2)
             plot.grid()
-            plot.ylim([-1.1, 1.1]), plot.legend()
+            plot.ylim([-1.1, 1.1])
 
             if dump_figures:
                 fig_name = '{}'.format(os.path.join(dump_folder, '{}.png'.format(file_cnt)))
