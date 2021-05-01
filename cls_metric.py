@@ -13,9 +13,20 @@ class doa_metric:
         self._tp_doa = 0
         self._total_pred = self._eps
 
+        self._fp_doa = 0
+        self._fn_doa = 0
+        self._ids = 0
         return
 
     def partial_compute_metric(self, dist_mat, gt_activity, pred_activity=None):
+        if pred_activity is not None:
+            M = pred_activity.sum(-1)
+            N = gt_activity.sum(-1)
+            self._fp_doa += (M-N).clip(min=0).sum(-1)
+            self._fn_doa += (N-M).clip(min=0).sum(-1)
+ 
+            self._ids += (pred_activity[1:]*(1-pred_activity[:-1])).sum(-1).sum(-1)
+
         for frame_cnt, loc_dist in enumerate(dist_mat):
             nb_active_gt = int(gt_activity[frame_cnt].sum())
             nb_active_pred = 2 if pred_activity is None else int(pred_activity[frame_cnt].sum()) #TODO remove hard coded max value of 2 DoAs 
@@ -36,10 +47,11 @@ class doa_metric:
 
     def get_results(self):
         LE = self._localization_error/self._tp_doa
+        MOTa = 1-(self._fp_doa + self._fn_doa + self._ids) / (self._total_gt + self._eps)
         LR = self._tp_doa/self._total_gt
         LP = self._tp_doa/self._total_pred
         LF = 2*LP*LR/(LP + LR + self._eps)
-        return 180.*LE/np.pi, 100.*LR, 100.*LP, 100.*LF
+        return 180.*LE/np.pi, 100.*MOTa, self._ids, 100.*LR, 100.*LP, 100.*LF
 
 
 

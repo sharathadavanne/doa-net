@@ -288,7 +288,7 @@ def main(argv):
         # Collect i/o data size and load model configuration
         data_in, data_out = data_gen_train.get_data_sizes()
         model = doanet_model.CRNN(data_in, data_out, params).to(device)
-#        model.load_state_dict(torch.load("models/95_4441371_foa_dev_split1_model.h5", map_location='cpu'))
+#        model.load_state_dict(torch.load("models/23_5624972_mic_dev_split1_model.h5", map_location='cpu'))
 
         print('---------------- DOA-net -------------------')
         print('FEATURES:\n\tdata_in: {}\n\tdata_out: {}\n'.format(data_in, data_out))
@@ -299,7 +299,7 @@ def main(argv):
 
         # start training
         best_val_epoch = -1
-        best_doa, best_recall, best_precision, best_fscore = 180, 0, 0, 0
+        best_doa, best_mota, best_ids, best_recall, best_precision, best_fscore = 180, 0, 1000, 0, 0, 0
         patience_cnt = 0
 
         nb_epoch = 2 if params['quick_test'] else params['nb_epochs']
@@ -326,25 +326,25 @@ def main(argv):
             val_metric = doa_metric()
             val_metric, val_loss, val_dMOTP_loss, val_dMOTA_loss, val_act_loss = test_epoch(data_gen_val, model, hnet_model, activity_loss, criterion, val_metric, params, device)
 
-            val_hung_loss, val_recall_doa, val_precision_doa, val_fscore_doa = val_metric.get_results()
+            val_hung_loss, val_mota, val_ids, val_recall_doa, val_precision_doa, val_fscore_doa = val_metric.get_results()
             val_time = time.time() - start_time
 
             # Save model if loss is good
             if val_hung_loss <= best_doa:
-                best_doa, best_val_epoch, best_recall, best_precision, best_fscore = val_hung_loss, epoch_cnt, val_recall_doa, val_precision_doa, val_fscore_doa
+                best_val_epoch, best_doa, best_mota, best_ids, best_recall, best_precision, best_fscore = epoch_cnt, val_hung_loss, val_mota, val_ids, val_recall_doa, val_precision_doa, val_fscore_doa
                 torch.save(model.state_dict(), model_name)
 
             # Print stats and plot scores
             print(
                 'epoch: {}, time: {:0.2f}/{:0.2f}, '
                 'train_loss: {:0.2f} {}, val_loss: {:0.2f} {}, '
-                'LE/LR/LP/LF: {:0.3f}/{}, '
+                'LE/MOTA/IDS/LR/LP/LF: {:0.3f}/{}, '
                 'best_val_epoch: {} {}'.format(
                     epoch_cnt, train_time, val_time,
                     train_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(train_dMOTP_loss, train_dMOTA_loss, train_act_loss) if params['use_hnet'] else '',
                     val_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(val_dMOTP_loss, val_dMOTA_loss, val_act_loss) if params['use_hnet'] else '',
-                    val_hung_loss, '{:0.2f}/{:0.2f}/{:0.2f}'.format(val_recall_doa, val_precision_doa, val_fscore_doa),
-                    best_val_epoch, '({:0.2f}, {:0.2f}/{:0.2f}/{:0.2f})'.format(best_doa, best_recall, best_precision, best_fscore))
+                    val_hung_loss, '{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}'.format(val_mota, val_ids, val_recall_doa, val_precision_doa, val_fscore_doa),
+                    best_val_epoch, '({:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f})'.format(best_doa, best_mota, best_ids, best_recall, best_precision, best_fscore))
             )
 
             tr_loss_list[epoch_cnt], val_loss_list[epoch_cnt], hung_val_loss_list[epoch_cnt] = train_loss, val_loss, val_hung_loss
@@ -368,12 +368,12 @@ def main(argv):
         test_metric = doa_metric()
         test_metric, test_loss, test_dMOTP_loss, test_dMOTA_loss, test_act_loss = test_epoch(data_gen_test, model, hnet_model, activity_loss, criterion, test_metric, params, device)
 
-        test_hung_loss, test_recall_doa, test_precision_doa, test_fscore_doa = test_metric.get_results()
+        test_hung_loss, test_mota, test_ids, test_recall_doa, test_precision_doa, test_fscore_doa = test_metric.get_results()
 
         print(
-            'test_loss: {:0.2f} {}, LE/LR/LP/LF: {:0.3f}/{}'.format(
+            'test_loss: {:0.2f} {}, LE/MOTA/IDS/LR/LP/LF: {:0.3f}/{}'.format(
                 test_loss, '({:0.2f},{:0.2f},{:0.2f})'.format(test_dMOTP_loss, test_dMOTA_loss, test_act_loss) if params['use_hnet'] else '',
-                test_hung_loss, '{:0.2f}/{:0.2f}/{:0.2f}'.format(test_recall_doa, test_precision_doa, test_fscore_doa))
+                test_hung_loss, '{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}/{:0.2f}'.format(test_mota, test_ids, test_recall_doa, test_precision_doa, test_fscore_doa))
         )
 
 

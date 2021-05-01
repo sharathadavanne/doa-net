@@ -139,18 +139,9 @@ def get_params(argv='1'):
         params['use_dmot_only']= True
         params['dMOTP_wt']= 50
         params['dMOTA_wt']= 1
-        params['IDS_wt']= 0
-
-    elif argv == '14':
-        params['dataset'] = 'foa'
-        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
-        params['use_hnet']= True
-        params['use_dmot_only']= True
-        params['dMOTP_wt']= 50
-        params['dMOTA_wt']= 1
         params['IDS_wt']= 1
 
-    elif argv == '15':
+    elif argv == '14':
         params['dataset'] = 'foa'
         params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
         params['use_hnet']= True
@@ -159,20 +150,29 @@ def get_params(argv='1'):
         params['dMOTA_wt']= 0
         params['IDS_wt']= 0
 
-    elif argv == '16':
+    elif argv == '15':
         params['dataset'] = 'foa'
         params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
         params['use_hnet']= True
         params['use_dmot_only']= False
         params['dMOTP_wt']= 50
         params['dMOTA_wt']= 1
+        params['IDS_wt']= 1
+
+    elif argv == '16':
+        params['dataset'] = 'mic'
+        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
+        params['use_hnet']= True
+        params['use_dmot_only']= True
+        params['dMOTP_wt']= 50
+        params['dMOTA_wt']= 0
         params['IDS_wt']= 0
 
     elif argv == '17':
-        params['dataset'] = 'foa'
+        params['dataset'] = 'mic'
         params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
         params['use_hnet']= True
-        params['use_dmot_only']= False
+        params['use_dmot_only']= True
         params['dMOTP_wt']= 50
         params['dMOTA_wt']= 1
         params['IDS_wt']= 1
@@ -181,48 +181,12 @@ def get_params(argv='1'):
         params['dataset'] = 'mic'
         params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
         params['use_hnet']= True
-        params['use_dmot_only']= True
+        params['use_dmot_only']= False
         params['dMOTP_wt']= 50
         params['dMOTA_wt']= 0
         params['IDS_wt']= 0
 
     elif argv == '19':
-        params['dataset'] = 'mic'
-        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
-        params['use_hnet']= True
-        params['use_dmot_only']= True
-        params['dMOTP_wt']= 50
-        params['dMOTA_wt']= 1
-        params['IDS_wt']= 0
-
-    elif argv == '20':
-        params['dataset'] = 'mic'
-        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
-        params['use_hnet']= True
-        params['use_dmot_only']= True
-        params['dMOTP_wt']= 50
-        params['dMOTA_wt']= 1
-        params['IDS_wt']= 1
-
-    elif argv == '21':
-        params['dataset'] = 'mic'
-        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
-        params['use_hnet']= True
-        params['use_dmot_only']= False
-        params['dMOTP_wt']= 50
-        params['dMOTA_wt']= 0
-        params['IDS_wt']= 0
-
-    elif argv == '22':
-        params['dataset'] = 'mic'
-        params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
-        params['use_hnet']= True
-        params['use_dmot_only']= False
-        params['dMOTP_wt']= 50
-        params['dMOTA_wt']= 1
-        params['IDS_wt']= 0
-
-    elif argv == '23':
         params['dataset'] = 'mic'
         params['feat_label_dir']='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label_augmented/'
         params['use_hnet']= True

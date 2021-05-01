@@ -163,10 +163,9 @@ class FeatureClass:
             if frame_ind < self._max_label_frames:
                 for active_event in range(len(active_event_list)):
                     nb_classes[frame_ind, active_event] = 1
-                    x_label[frame_ind, active_event] = active_event_list[active_event][1]
-                    y_label[frame_ind, active_event] = active_event_list[active_event][2]
-                    z_label[frame_ind, active_event] = active_event_list[active_event][3]
-
+                    x_label[frame_ind, active_event] = active_event_list[active_event][2]
+                    y_label[frame_ind, active_event] = active_event_list[active_event][3]
+                    z_label[frame_ind, active_event] = active_event_list[active_event][4]
         label_mat = np.concatenate((x_label, y_label, z_label, nb_classes), axis=1)
         return label_mat
 
@@ -286,10 +285,10 @@ class FeatureClass:
             _frame_ind = int(_words[0])
             if _frame_ind not in _output_dict:
                 _output_dict[_frame_ind] = []
-            if len(_words) == 5: #read polar coordinates format, we ignore the track count 
-                _output_dict[_frame_ind].append([int(_words[1]), float(_words[3]), float(_words[4])])
-            elif len(_words) == 6: # read Cartesian coordinates format, we ignore the track count
-                _output_dict[_frame_ind].append([int(_words[1]), float(_words[3]), float(_words[4]), float(_words[5])])
+            if len(_words) == 5: #polar coordinates 
+                _output_dict[_frame_ind].append([int(_words[1]), int(_words[2]), float(_words[3]), float(_words[4])])
+            elif len(_words) == 6: # cartesian coordinates
+                _output_dict[_frame_ind].append([int(_words[1]), int(_words[2]), float(_words[3]), float(_words[4]), float(_words[5])])
         _fid.close()
         return _output_dict
 
@@ -390,14 +389,14 @@ class FeatureClass:
                 out_dict[frame_cnt] = []
                 for tmp_val in in_dict[frame_cnt]:
 
-                    ele_rad = tmp_val[2]*np.pi/180.
-                    azi_rad = tmp_val[1]*np.pi/180
+                    ele_rad = tmp_val[3]*np.pi/180.
+                    azi_rad = tmp_val[2]*np.pi/180
 
                     tmp_label = np.cos(ele_rad)
                     x = np.cos(azi_rad) * tmp_label
                     y = np.sin(azi_rad) * tmp_label
                     z = np.sin(ele_rad)
-                    out_dict[frame_cnt].append([tmp_val[0], x, y, z])
+                    out_dict[frame_cnt].append([tmp_val[0], tmp_val[1], x, y, z])
         return out_dict
 
     def convert_output_format_cartesian_to_polar(self, in_dict):
@@ -406,13 +405,13 @@ class FeatureClass:
             if frame_cnt not in out_dict:
                 out_dict[frame_cnt] = []
                 for tmp_val in in_dict[frame_cnt]:
-                    x, y, z = tmp_val[1], tmp_val[2], tmp_val[3]
+                    x, y, z = tmp_val[2], tmp_val[3], tmp_val[4]
 
                     # in degrees
                     azimuth = np.arctan2(y, x) * 180 / np.pi
                     elevation = np.arctan2(z, np.sqrt(x**2 + y**2)) * 180 / np.pi
                     r = np.sqrt(x**2 + y**2 + z**2)
-                    out_dict[frame_cnt].append([tmp_val[0], azimuth, elevation])
+                    out_dict[frame_cnt].append([tmp_val[0], tmp_val[1], azimuth, elevation])
         return out_dict
 
     # ------------------------------- Misc public functions -------------------------------
