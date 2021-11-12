@@ -8,19 +8,16 @@ def get_params(argv='1'):
     print("SET: {}".format(argv))
     # ########### default parameters ##############
     params = dict(
-        quick_test=False,     # To do quick test. Trains/test on small subset of dataset, and # of epochs
+        quick_test=True,     # To do quick test. Trains/test on small subset of dataset, and # of epochs
 
         # INPUT PATH
-        # dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
-        dataset_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/',
+        dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
 
         # OUTPUT PATH
-        # feat_label_dir='DCASE2020_SELD_dataset/feat_label_hnet/',  # Directory to dump extracted features and labels
-        feat_label_dir='/scratch/asignal/sharath/DCASE2020_SELD_dataset/feat_label/',  # Directory to dump extracted features and labels
+        feat_label_dir='DCASE2020_SELD_dataset/feat_label_hnet/',  # Directory to dump extracted features and labels
 
         model_dir='models/',   # Dumps the trained models and training curves in this folder
-        dcase_output=True,     # If true, dumps the results recording-wise in 'dcase_dir' path.
-                               # Set this true after you have finalized your model, save the output, and submit
+
         dcase_dir='results/',  # Dumps the recording-wise network output in this folder
 
         # DATASET LOADING PARAMETERS
